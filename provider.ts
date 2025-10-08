@@ -3,11 +3,13 @@
 import { LanguageModel } from 'ai';
 import { execSync } from 'child_process';
 
+import { Notify } from './util';
+
 export type ModelSelector = (modelName: string) => LanguageModel;
 
 export interface ProviderOptions {
   provider: string;
-  notify?: (level: 'info' | 'warn' | 'error', message: string) => void;
+  notify?: Notify;
   allowInstall?: boolean;
   providers?: Record<string, ProviderInitOptions>;
 }
@@ -37,7 +39,7 @@ let cachedModelsDevIndex: Record<string, Provider> | null | undefined;
 
 async function installAndImport(
   moduleName: string,
-  notify?: (level: 'info' | 'warn' | 'error', message: string) => void,
+  notify?: Notify,
   allowInstall = true,
 ): Promise<any | null> {
   if (!moduleName) {
@@ -164,7 +166,7 @@ function createSelectorFromFactory(
   factory: Function | undefined,
   opts?: ProviderInitOptions,
   provider?: Provider,
-  notify?: (level: 'info' | 'warn' | 'error', message: string) => void,
+  notify?: Notify,
 ): ModelSelector {
   try {
     const apiKey = opts?.apiKey ?? process.env.GEMINI_API_KEY ?? '';
