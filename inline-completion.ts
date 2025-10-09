@@ -3,7 +3,7 @@
 import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, LanguageModel } from 'ai';
-import { Log } from './util';
+import { Log, time } from './util';
 
 import INLINE_COMPLETION_PROMPT from './prompt/inline-completion.txt';
 
@@ -15,6 +15,7 @@ export namespace InlineCompletion {
     completions?: number,
     log?: Log,
   ): Promise<string[] | null> {
+    using _ = time(log!, 'info', 'InlineCompletion.generate');
     let docText = document.getText();
     let textBefore: string | undefined;
     let textAfter: string | undefined;
@@ -26,12 +27,12 @@ export namespace InlineCompletion {
 
     let prompt: string =
       `language: ${document.languageId ?? 'text'}\n` +
-      `completions: ${completions ?? 5}\n` +
+      `completions: ${completions ?? 5}\n\n` +
       textBefore +
       '<cursor>' +
       textAfter;
 
-    log?.('info', prompt);
+    log?.('debug', prompt);
 
     try {
       const { text } = await generateText({

@@ -11,14 +11,14 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocuments } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { LanguageModel } from 'ai';
+import { type LanguageModel } from 'ai';
 import {
   createProvider,
   ProviderInitOptions,
   type ModelSelector,
 } from './provider';
 import { InlineCompletion } from './inline-completion';
-import { Level, Log, Notify } from './util';
+import { Level, Log, time } from './util';
 
 // TODO: Figure out a way to ship these aruond without needing this horrible
 // top-levl functions.
@@ -36,33 +36,24 @@ const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 documents.listen(connection);
 
-const log: Log = (level: Level, message: string) => {
+const log: Log = (
+  level: Level,
+  message: string,
+  extra?: Record<string, any>,
+) => {
+  const postfix = extra ? ` ${JSON.stringify(extra)}` : '';
   switch (level) {
     case 'debug':
-      connection.console.debug(message);
+      connection.console.debug(message + postfix);
       break;
     case 'info':
-      connection.console.log(message);
+      connection.console.log(message + postfix);
       break;
     case 'warn':
-      connection.console.warn(message);
+      connection.console.warn(message + postfix);
       break;
     case 'error':
-      connection.console.error(message);
-      break;
-  }
-};
-
-const notify: Notify = (level: Level, message: string) => {
-  switch (level) {
-    case 'info':
-      connection.window.showInformationMessage(message);
-      break;
-    case 'warn':
-      connection.window.showWarningMessage(message);
-      break;
-    case 'error':
-      connection.window.showErrorMessage(message);
+      connection.console.error(message + postfix);
       break;
   }
 };
@@ -76,7 +67,7 @@ type ProviderInitResult = {
 
 async function initProvider(
   initOpts: Record<string, any>,
-  notify: (level: 'info' | 'warn' | 'error', message: string) => void,
+  log: Log,
 ): Promise<ProviderInitResult> {
   const providers =
     (initOpts.providers as Record<string, ProviderInitOptions>) || undefined;
@@ -88,14 +79,13 @@ async function initProvider(
     );
   }
 
-  const parts = optModel.split('/', 2).filter(Boolean);
-  if (parts.length < 2)
-    throw new Error('Invalid model identifier. Did you include the provider?');
+  const [providerId, ...parts] = optModel.split('/').filter(Boolean);
+  const modelId = parts.join('/');
+  const provider = providerId!;
 
-  const provider = parts[0]!;
-  const modelId = parts[1]!;
+  log('info', `provider=${providerId}, model=${modelId}`);
 
-  const factory = await createProvider({ provider, notify, providers });
+  const factory = await createProvider({ provider, log: log, providers });
 
   try {
     return {
@@ -105,10 +95,7 @@ async function initProvider(
       modelId,
     };
   } catch (err) {
-    log(
-      'error',
-      `Could not instantiate model ${modelId}: ${String(err)}`,
-    );
+    log('error', `Could not instantiate model ${modelId}: ${String(err)}`);
     throw err;
   }
 }
@@ -119,10 +106,9 @@ connection.onInitialize(async (params: InitializeParams) => {
 
   const result = await (async () => {
     try {
-      const res = await initProvider(initOpts, notify);
+      const res = await initProvider(initOpts, log);
       provider = res.factory;
       SELECTED_MODEL = res.modelId;
-      log('info', 'Provider initialized. model=' + SELECTED_MODEL);
     } catch (err) {
       log('error', `Provider init failed: ${String(err)}`);
       throw err;
@@ -146,7 +132,7 @@ connection.onInitialized((_params: InitializedParams) => {
   connection.onDidChangeConfiguration(async change => {
     try {
       const config = (change.settings || {}) as Record<string, any>;
-      const res = await initProvider(config, notify);
+      const res = await initProvider(config, log);
       provider = res.factory;
       SELECTED_MODEL = res.modelId;
       log('info', 'Provider initialized. model=' + SELECTED_MODEL);
@@ -158,7 +144,7 @@ connection.onInitialized((_params: InitializedParams) => {
 
 connection.onCompletion(
   async (pos: TextDocumentPositionParams): Promise<CompletionItem[]> => {
-    log('info', 'onCompletion called');
+    using _ = time(log, 'info', 'onCompletion');
 
     const completions = await InlineCompletion.generate(
       provider(SELECTED_MODEL!)!,
@@ -167,6 +153,8 @@ connection.onCompletion(
       5,
       log,
     );
+
+    log('info', `Completions ${JSON.stringify(completions)}`);
 
     const items: CompletionItem[] = completions!.map((text, index) => ({
       label: text,
@@ -182,7 +170,11 @@ connection.onCompletion(
 );
 
 connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
-  log('info', `onCompletionResolve called for item: ${item.label}`);
+  using _ = time(
+    log,
+    'info',
+    `onCompletionResolve called for item: ${item.label}`,
+  );
   const data = item.data as CompletionData;
   if (data && data.model) {
     item.detail = `ai-lsp (${data.model})`;
