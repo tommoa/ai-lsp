@@ -4,6 +4,30 @@ This project aims to copy the functionality of `copilot-language-server`, but pr
 
 NOTE: This is currently very WIP.
 
+## Missing features
+
+- Figure out why `copilot-language-server` requires `textDocument/didFocus`
+  notifications.
+- Do next edit completions with `textDocument/copilotInlineEdit`.
+  - Parameters require position and document.
+  - Return back the following JSON:
+    ```json
+    {
+      "edits": [
+        {
+          "range": {
+            "start": { "line": 0, "character": 0 },
+            "end": { "line": 0, "character": 0 }
+          },
+          "textDocument": { "uri": "<uri>" },
+          "text": "...",
+        }
+      ]
+    }
+    ```
+
+## Installation
+
 To install dependencies:
 
 ```bash
@@ -15,8 +39,6 @@ To run:
 ```bash
 bun run index.ts
 ```
-
-This project was created using `bun init`. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
 
 ## FAQ
 
