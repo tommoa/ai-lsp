@@ -5,7 +5,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, LanguageModel } from 'ai';
 import { Log, time } from './util';
 
-import INLINE_COMPLETION_PROMPT from './prompt/inline-completion.txt';
+import INLINE_COMPLETION_PROMPT from '../prompt/inline-completion.txt';
 
 export namespace InlineCompletion {
   export async function generate(

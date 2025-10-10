@@ -9,7 +9,7 @@
     "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
     "prepare": "husky install",
     "build": "tsc --outDir dist",
-    "build:bundle": "bunx esbuild index.ts --bundle --platform=node --target=es2022 --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\"",
+    "build:bundle": "bunx esbuild src/index.ts --bundle --platform=node --target=es2022 --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\"",
     "start": "bun run index.ts"
   },
   "devDependencies": {
@@ -30,7 +30,7 @@
   },
   "bin": {
     "ai-lsp": "dist/cli-node.js",
-    "ai-lsp-bun": "index.ts"
+    "ai-lsp-bun": "src/index.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^2.0.17",

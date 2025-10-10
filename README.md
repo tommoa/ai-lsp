@@ -20,7 +20,7 @@ NOTE: This is currently very WIP.
             "end": { "line": 0, "character": 0 }
           },
           "textDocument": { "uri": "<uri>" },
-          "text": "...",
+          "text": "<multiline_edit>"
         }
       ]
     }
