@@ -14,3 +14,4 @@ RULES:
   completion that typechecks/parse-checks locally.
 - Return each completion on a separate line. The user will tell you how many
   completions to return using the key `completions`.
+- Include the characters preceding the cursor that are part of the completion.
