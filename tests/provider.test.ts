@@ -1,6 +1,6 @@
 // @ts-nocheck
 import assert from 'node:assert/strict';
-import { createProvider } from '../provider';
+import { createProvider } from '../src/provider';
 
 // 1) Local module path (mock) -> should return mock selector
 test('local mock provider', async () => {
@@ -9,7 +9,7 @@ test('local mock provider', async () => {
     messages.push(`${level}:${msg}`);
   const sel = await createProvider({
     provider: 'google',
-    providers: { google: { npm: './tests/mock-mod' } },
+    providers: { google: { npm: new URL('./mock-mod', import.meta.url).href } },
     log: notify as any,
     allowInstall: false,
   });
@@ -102,7 +102,9 @@ test('google model maps to provider wrapper via models.dev', async () => {
   try {
     const sel = await createProvider({
       provider: 'google',
-      providers: { google: { npm: './tests/mock-mod' } },
+      providers: {
+        google: { npm: new URL('./mock-mod', import.meta.url).href },
+      },
     });
     const out = sel('gemini-flash-latest');
     // mock-mod returns a string like `mock:<model>`
@@ -137,7 +139,9 @@ test('prepopulation from models.dev when providers omitted', async () => {
     const sel = await createProvider({
       provider: 'google',
       // override to avoid network installs in test env
-      providers: { google: { npm: './tests/mock-mod' } },
+      providers: {
+        google: { npm: new URL('./mock-mod', import.meta.url).href },
+      },
     });
     const out = sel('gemini-flash-latest');
     assert.equal(out, 'mock:gemini-flash-latest');
