@@ -1,32 +1,20 @@
-**Build & Run**
+**Agent Guidelines**
 
-- Install: `bun install`
-- Run: `bun run index.ts` (entrypoint `index.ts`)
-- Type-check: `npx tsc --noEmit` (or `bunx tsc --noEmit`)
-- Run single test: `bun test path/to/testfile` (preferred) or `node --test path/to/testfile`
+- **Build & Run:** Install: `bun install`; Run: `bun run index.ts`
+- **Type-check:** `bunx tsc --noEmit`
+- **Run tests:** `bun test` (all) — single test: `bun test path/to/testfile` or `node --test path/to/testfile`
 
-**Lint & Format**
+- **Lint & Format:** `bun run lint`; `bun run format`
+- **Line length:** keep lines <= 80 characters
 
-- Lint: `npx eslint . --ext .ts` (use `--fix`)
-- Format: `npx prettier --write .`
-- Use a maximum line length of 80 characters.
+- **Imports & Modules:** Use ESM imports/exports; use `import type` for types-only
+- **Import order:** external deps, blank line, then internal modules
 
-**Imports & Modules**
+- **Types & Naming:** explicit types on public APIs; avoid `any`
+- **Conventions:** `camelCase` for vars/functions, `PascalCase` for types/classes, `UPPER_SNAKE` for constants
 
-- Use ESM imports/exports; use `import type` for types-only imports.
-- Group imports: external deps first, blank line, then internal modules.
+- **Formatting & Errors:** run Prettier/ESLint autofix before commits; throw or return errors; do not swallow
+- **Error messages:** use descriptive messages and avoid including secrets
 
-**Types & Naming**
-
-- Prefer explicit types on public APIs; avoid `any`.
-- Use `camelCase` for vars/functions, `PascalCase` for types/classes, `UPPER_SNAKE` for constants.
-
-**Formatting & Error Handling**
-
-- Run Prettier/ESLint autofix before commits; keep lines <= 80 chars.
-- Throw or return errors; do not swallow. Use descriptive messages and avoid secrets.
-
-**Agent rules**
-
-- If present, follow `.cursor` rules and `.github/copilot-instructions.md`.
-- Agents should run `npx tsc --noEmit` and `bun run index.ts` to validate changes.
+- **Agent checks:** run `bun tsc --noEmit`, `bun run lint` and `bun run index.ts` to validate changes
+- **Cursor/Copilot:** follow any `.cursor` rules and `.github/copilot-instructions.md` if present

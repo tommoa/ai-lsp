@@ -18,6 +18,7 @@ import {
   type ModelSelector,
 } from './provider';
 import { InlineCompletion } from './inline-completion';
+import { NextEdit } from './next-edit';
 import { Level, Log, time } from './util';
 
 // TODO: Figure out a way to ship these aruond without needing this horrible
@@ -181,5 +182,29 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
   }
   return item;
 });
+
+// copilotInlineCompletion handler
+connection.onRequest(
+  'textDocument/copilotInlineCompletion',
+  async (params: { textDocument: { uri: string } }) => {
+    using _ = time(log, 'info', 'copilotInlineCompletion');
+    const uri = params?.textDocument?.uri;
+    if (!uri) return { edits: [] };
+
+    const doc = documents.get(uri);
+    if (!doc) return { edits: [] };
+
+    // Lazy import to avoid circular deps during startup
+    const model = provider(SELECTED_MODEL!)!;
+
+    try {
+      const edits = await NextEdit.generate({ model, document: doc, log });
+      return { edits };
+    } catch (err) {
+      log('error', `copilotInlineCompletion failed: ${String(err)}`);
+      return { edits: [] };
+    }
+  },
+);
 
 connection.listen();
