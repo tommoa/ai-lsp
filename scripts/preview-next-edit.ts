@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { spawnSync } from 'child_process';
 import { NextEdit } from '../src/next-edit';
-import { createProvider } from '../src/provider';
+import { createProvider } from '../src/provider/provider';
 import { generateText } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 

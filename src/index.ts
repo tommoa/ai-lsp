@@ -16,7 +16,7 @@ import {
   createProvider,
   ProviderInitOptions,
   type ModelSelector,
-} from './provider';
+} from './provider/provider';
 import { InlineCompletion } from './inline-completion';
 import { NextEdit } from './next-edit';
 import { Level, Log, time } from './util';
