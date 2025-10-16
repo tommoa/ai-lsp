@@ -348,7 +348,7 @@ async function main(): Promise<void> {
       const criticModelObj = criticFactory(criticModelName);
 
       /* eslint-disable max-len */
-      const CRITIC_PROMPT = `You are a strict code reviewer. Return ONLY a JSON object with the following schema:\n{\n  "overall": number,\n  "scores": {"parseConfidence":number,"tests":number,"correctness":number,"readability":number,"risk":number},\n  "confidence": number,\n  "applySafely": "auto-accept"|"human-review"|"reject",\n  "explanations": [{"kind":"correctness"|"style"|"risk"|"other","text":"..."}],\n  "suggestedFixes": ["..."]\n}\nUse the quickChecks and diff below to rate the change. Be concise.\n`;
+      const CRITIC_PROMPT = `You are a strict code reviewer. Return ONLY a JSON object with the following schema:\n{\n  "overall": number,\n  "scores": {"parseConfidence":number,"tests":number,"correctness":number,"readability":number,"risk":number},\n  "confidence": number,\n  "applySafely": "auto-accept"|"human-review"|"reject",\n  "explanations": [{"kind":"correctness"|"style"|"risk"|"other","text":"..."}],\n  "suggestedFixes": ["..."]\n}\nUse the quickChecks and diff below to rate the change. Be concise. All scores are out of 100\n`;
       /* eslint-enable max-len */
 
       const promptText =

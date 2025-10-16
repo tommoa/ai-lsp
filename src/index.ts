@@ -199,9 +199,12 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
 // copilotInlineCompletion handler
 connection.onRequest(
   'textDocument/copilotInlineCompletion',
-  async (params: { textDocument: { uri: string } }) => {
+  async (opts: {
+    textDocument: { uri: string };
+    position: TextDocumentPositionParams;
+  }) => {
     using _ = time(log, 'info', 'copilotInlineCompletion');
-    const uri = params?.textDocument?.uri;
+    const uri = opts?.textDocument?.uri;
     if (!uri) return { edits: [] };
 
     const doc = documents.get(uri);

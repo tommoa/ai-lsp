@@ -24,6 +24,7 @@
 import { Log, time } from './util';
 import { type LanguageModel } from 'ai';
 import { generateText } from 'ai';
+import { type Range } from 'vscode-languageserver-types';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
 import PROMPT from '../prompt/next-edit.txt';
 
@@ -46,19 +47,11 @@ export namespace NextEdit {
   };
 
   /**
-   * Minimal LSP position and range types used by this module. These mirror the
-   * shape of the LSP types but are intentionally small to avoid pulling in
-   * additional dependencies.
-   */
-  export type LspPosition = { line: number; character: number };
-  export type LspRange = { start: LspPosition; end: LspPosition };
-
-  /**
    * LSP-style edit produced by this module. `textDocument.uri` may be empty
    * when the underlying `TextDocument` implementation does not expose a URI.
    */
   export type LspEdit = {
-    range: LspRange;
+    range: Range;
     textDocument: { uri: string };
     text: string;
     reason?: string;
@@ -292,7 +285,7 @@ export namespace NextEdit {
       }
 
       // Use document.positionAt so positions are consistent with the doc.
-      const range: LspRange = {
+      const range: Range = {
         start: document.positionAt(startIndex),
         end: document.positionAt(endIndex),
       };
