@@ -14,8 +14,8 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@typescript-eslint/eslint-plugin": "^8.46.0",
-    "@typescript-eslint/parser": "^8.46.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.1",
+    "@typescript-eslint/parser": "^8.46.1",
     "eslint": "^9.37.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -33,11 +33,11 @@
     "ai-lsp-bun": "src/index.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^2.0.20",
-    "@ai-sdk/google-vertex": "^3.0.40",
-    "@ai-sdk/openai": "^2.0.50",
+    "@ai-sdk/google": "^2.0.23",
+    "@ai-sdk/google-vertex": "^3.0.46",
+    "@ai-sdk/openai": "^2.0.52",
     "@ai-sdk/openai-compatible": "^1.0.22",
-    "ai": "^5.0.68",
+    "ai": "^5.0.72",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12"
   },
