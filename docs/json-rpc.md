@@ -1,189 +1,181 @@
-# copilot-language-server — JSON-RPC Method Reference
+# copilot-language-server — Inline Completions & Next Edit Suggestions
 
-This document describes the JSON-RPC methods used between the
-copilot.lua client and the copilot-language-server. It is derived from
-client usage patterns in `copilot.lua` (not the server source).
+This document describes the JSON-RPC methods and payloads needed to
+implement two features: Inline Completions (as-you-type) and Next Edit
+Suggestions (NES). The shapes and behavior are inferred from copilot.vim
+(and compatible clients such as sidekick.nvim). The server should
+implement these contracts to interoperate with those clients.
 
-A few global notes
+Global notes
 
-- All positions/character offsets use UTF-16 code-unit indexing.
-- The client usually sends `params._ = true` to coerce empty tables
-  into JSON objects; servers should ignore unknown fields.
-- Many request `params` are produced by `util.get_doc_params()` in the
-  client. See "Common params" below for the shape.
+- All positions/character offsets use UTF-16 code-unit indexing
+  unless the `initialize` exchange negotiates a different `offsetEncoding`.
+- Be tolerant to small variations: copilot.vim accepts either an array
+  result or an object `{ items: [...] }` for inline completions.
+- Clients may cancel in-flight requests; support LSP request
+  cancellation.
 
-**Common params**
+Inline Completions (textDocument/inlineCompletion)
 
-- These are the fields typically sent for completions and panel
-  requests. The client builds them with `util.get_doc_params()`.
+Purpose
 
-Example (informal JSON):
+- Provide single-line or short multi-line completions while the user
+  types. Supports cycling through additional candidates and partial
+  acceptance.
+
+Method
+
+- `textDocument/inlineCompletion` (request)
+
+Params (typical)
 {
-"doc": {
-"uri": "file:///path/to/file",
-"version": 42,
-"relativePath": "src/foo.js",
-"insertSpaces": true,
-"tabSize": 2,
-"indentSize": 2,
-"position": { "line": 10, "character": 5 }
-},
-"textDocument": { "uri": "file:///path/to/file", "version": 42,
-"relativePath": "src/foo.js" },
-"position": { "line": 10, "character": 5 }
+"textDocument": { "uri": "file:///path/to/file" },
+"position": { "line": 10, "character": 5 }, // UTF-16
+"formattingOptions": { "insertSpaces": true, "tabSize": 2 },
+"context": { "triggerKind": 1 }
 }
 
 Notes
 
-- `position.character` is the UTF-16 character offset in the line.
-- Panel requests add `panelId: string` to `params`.
+- `triggerKind` distinguishes auto vs invoked vs cycling requests.
+- Clients may call the same method again with a different
+  `triggerKind` to request extra/cycling candidates.
 
-**Methods (client -> server)**
+Result (either form accepted)
 
-- **`workspace/didChangeConfiguration`** — notification
-  - Purpose: provide workspace/client settings to the server.
-  - Params (example):
-    { "settings": { /_ copilot settings _/ } }
-  - Settings keys: see `SettingsOpts.md` in copilot.lua. Examples:
-    - `inlineSuggest.enable`
-    - `advanced.inlineSuggestCount`
-    - `advanced.listCount`
-    - `debug.*`, `editor.*`, etc.
-  - Response: none (notification).
+- Array form:
+  [
+  {
+  "insertText": "console.log('hi')",
+  "range": { "start": {"line":10,"character":5}, "end": {"line":10,"character":5} },
+  "command": { "title": "cmd", "command": "server.cmd", "arguments": [...] },
+  "uuid": "optional-stable-id",
+  "displayText": "optional display"
+  }
+  ]
 
-- **`$/setTrace`** — notification
-  - Purpose: enable/disable LSP trace on the server.
-  - Params: { "value": "off" | "messages" | "verbose" }
-  - Response: none (notification).
+- Object form:
+  { "items": [ /* same items as above */ ] }
 
-- **`checkStatus`** — request
-  - Purpose: check Copilot sign-in / telemetry status.
-  - Params (optional): { "options": { "localChecksOnly": boolean } }
-  - Result: { "user"?: string, "status": "OK"|"NotAuthorized"|"NoTelemetryConsent" }
+Item fields the client uses
 
-- **`signInInitiate`** — request
-  - Purpose: start permanent sign-in (device flow).
-  - Params: {} (empty)
-  - Result: may include { "verificationUri"?: string, "userCode"?: string }
+- `insertText` (string) — text to insert (client expects string).
+- `range` — LSP Range using UTF-16 offsets.
+- `command`? — optional LSP `Command` to execute when accepted.
+- `uuid`? — optional stable identifier for telemetry.
 
-- **`signInConfirm`** — request
-  - Purpose: confirm sign-in flow completion for `userId`.
-  - Params: { "userId": string }
-  - Result: { "status": string, "error"?: { "message": string }, "user"?: string }
+Behavioral expectations
 
-- **`signOut`** — request
-  - Purpose: sign out current Copilot auth session.
-  - Params: {} (empty)
-  - Result: unspecified (treat as generic success response)
+- Cancellation: server must honor request cancellation.
+- Cycling: repeated requests with `context.triggerKind` should return
+  additional or alternate candidates; client deduplicates by `insertText`.
+- Partial accept: client notifies the server with
+  `textDocument/didPartiallyAcceptCompletion` when a partial accept
+  occurs (see Telemetry below).
 
-- **`getVersion`** — request
-  - Purpose: get server version.
-  - Params: {} (empty)
-  - Result: { "version": string }
+Telemetry / notifications (client → server)
 
-- **`notifyAccepted`** — request
-  - Purpose: inform server a completion was accepted.
-  - Params: { "uuid": string, "acceptedLength"?: integer }
-  - Notes: `acceptedLength` is the UTF-16 length of the accepted
-    completion as computed by the client.
-  - Result: unspecified
+- `textDocument/didShowCompletion` — payload: `{ item }` when a candidate is shown.
+- `textDocument/didPartiallyAcceptCompletion` — payload: `{ item, acceptedLength }`.
+  - `acceptedLength` is measured in UTF-16 code units.
 
-- **`notifyRejected`** — request
-  - Purpose: inform server that a set of shown suggestions were
-    rejected/dismissed.
-  - Params: { "uuids": string[] }
-  - Result: unspecified
+Example minimal flow
 
-- **`notifyShown`** — request
-  - Purpose: inform server that a suggestion was displayed to the
-    user.
-  - Params: { "uuid": string }
-  - Result: unspecified
+1. Client sends `textDocument/inlineCompletion` at cursor position.
+2. Server replies with array of items or `{ items: [...] }`.
+3. Client shows preview; on show it sends `didShowCompletion`.
+4. If user accepts partially, client sends `didPartiallyAcceptCompletion`.
+5. If the item contains `command`, client may call `workspace/executeCommand` instead of inserting text.
 
-- **`getCompletions`** — request
-  - Purpose: request inline completions for the current doc/position.
-  - Params: `util.get_doc_params()` shape (see "Common params").
-  - Result: { "completions": [ completion ] }
+Next Edit Suggestions (NES) — batched edits
 
-  completion (object) fields
-  - `displayText`: string — presentation text shown in UI.
-  - `position`: { line: integer, character: integer } — suggested
-    insertion position.
-  - `range`: { "start": { line, character }, "end": { line,
-    character } } — LSP-style range (UTF-16 offsets).
-  - `text`: string — full completion text to insert.
-  - `uuid`: string — unique id for telemetry/accept/reject events.
-  - `partial_text`: string? — optional partial text for partial
-    accept flows.
+Purpose
 
-  - Notes: the client caches `params` and the request id so it can
-    cancel in-flight requests (the client calls `client:cancel_request(id)`).
+- Provide larger, multi-line or multi-hunk edits (refactorings / whole
+  suggestions). NES is return-as-a-batch and applied atomically; sidekick.nvim
+  uses `textDocument/copilotInlineEdit` for this flow.
 
-- **`getCompletionsCycling`** — request
-  - Purpose: fetch additional / cycling completions to append to the
-    existing list.
-  - Params: same shape as `getCompletions` (client passes previous
-    params it used for `getCompletions`).
-  - Result: same as `getCompletions` ({ "completions": [...] }).
-  - Notes: the client filters out duplicate `text` values and merges
-    new suggestions into the current list.
+Method
 
-- **`getPanelCompletions`** — request
-  - Purpose: begin generation of many solutions for the Panel view.
-  - Params: `util.get_doc_params()` extended with `panelId: string`.
-    The client updates `params.doc.position.character` to the cursor
-    UTF-16 index before calling this.
-  - Result (initial): an object containing at least
-    `{ "solutionCountTarget": integer }` (client reads
-    `result.solutionCountTarget`).
-  - Flow: after the request, the server should send `PanelSolution`
-    notifications for each solution, followed by a
-    `PanelSolutionsDone` notification.
+- `textDocument/copilotInlineEdit` (request)
 
-**Server -> Client notifications handled by client**
+Params (typical)
 
-- **`PanelSolution`** — notification (server -> client)
-  - Payload (typedef `copilot_panel_solution_data` used in client):
-    {
-    "panelId": string,
-    "completionText": string,
-    "displayText": string,
-    "range": { "start": { "line": int, "character": int },
-    "end": { "line": int, "character": int } },
-    "score": number,
-    "solutionId": string
-    }
-  - Client behavior: panel displays each solution; `solutionId` is
-    used for accept/telemetry.
+- Use LSP position params created with the client offset encoding, for
+  example: `vim.lsp.util.make_position_params(0, client.offset_encoding)`.
+- Include `textDocument.version` (buffer version) in the params.
 
-- **`PanelSolutionsDone`** — notification
-  - Payload: { "panelId": string, "status": "OK"|"Error",
-    "message"?: string }
-  - Client behavior: marks panel done or shows an error.
+Example params
+{
+"textDocument": { "uri": "file:///x", "version": 42 },
+"position": { "line": 10, "character": 5 }
+}
 
-- **`statusNotification`** — notification
-  - Purpose: server status updates consumed by the client
-    (`copilot.status` handler).
+Result
 
-- **`window/showDocument`** — request/notification handled by client
-  - Payload: { "uri": string, "external"?: boolean,
-    "takeFocus"?: boolean, "selection"?: boolean }
-  - Result (client -> server response): { "success": boolean }
-  - Notes: the client maps `window/showDocument` to `util.show_document`.
+- Single response: `{ "edits": [ NesEdit, ... ] }`
 
-**Implementation notes for server authors**
+NesEdit (fields used by clients)
 
-- Use UTF-16 indexing for all positions and lengths.
-- Be tolerant to extra/unknown keys; the client may send `params._` or
-  other metadata.
-- For `getPanelCompletions`, prefer streaming solutions as
-  `PanelSolution` notifications and then a `PanelSolutionsDone` final
-  notification. Include `solutionCountTarget` in the immediate
-  response so client can show progress.
-- Make `uuid` stable and unique per suggestion so telemetry/accept/
-  reject flows can reference it.
-- `notifyAccepted` may include `acceptedLength` (UTF-16) — record if
-  you need acceptance metrics.
+- `textDocument`: { uri: string, version: integer }
+- `range`: LSP Range (start/end positions; encoding = negotiated encoding)
+- `text`: string — replacement/newText for the range
+- `command`? — optional LSP `Command` to execute after apply
+- `uuid`? — optional stable id for telemetry
 
-If you want, I can also generate a machine-readable JSON Schema file
-for each method (useful for server stubs).
+Client behavior
+
+- Clients convert server-provided UTF-16 positions to buffer byte indices
+  using their `client.offset_encoding` and compute diffs/hunks for UI.
+- Apply edits atomically with `apply_text_edits` using the client's
+  offset encoding helper.
+- After applying edits, client executes any supplied `command` via
+  `workspace/executeCommand` / client exec functions.
+
+Example NES result
+{
+"edits": [
+{
+"textDocument": { "uri":"file:///x", "version": 42 },
+"range": { "start": {"line": 5, "character": 0}, "end": {"line": 7, "character": 0} },
+"text": "function foo()\n return 42\nend\n",
+"command": { "title": "postApply", "command": "server.postApply", "arguments": [ ... ] },
+"uuid": "edit-123"
+}
+]
+}
+
+Behavioral expectations
+
+- No streaming required — server returns the edits array in one
+  response. Clients show diffs and allow review before apply.
+- Provide stable ids (`uuid`) if you want accept/reject telemetry.
+- Support `workspace/executeCommand` for server-supplied commands.
+
+Shared implementation notes
+
+- Offset encoding: negotiate in `initialize`. Most clients expect UTF-16
+  — convert positions and lengths accordingly. In Lua/Neovim use
+  `vim.fn.strutf16len` or `vim.lsp.util` helpers; in JS the string
+  `.length` matches UTF-16 code units.
+- Tolerance: accept both result shapes for inline completions (array or
+  `{ items: [] }`) to be compatible with copilot.vim.
+- Cancellation: inline completion requests are cancelled by the client
+  frequently — handle cancellations cleanly.
+- Telemetry: if you emit `uuid`/`solutionId`, support client-side
+  notifications (`didShowCompletion`, `didPartiallyAcceptCompletion`) to
+  collect telemetry or learning signals.
+
+Quick comparison table
+
+| Feature                     | Method                           | Request shape                                            | Result shape                                                                                                        |
+| --------------------------- | -------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Inline completions          | `textDocument/inlineCompletion`  | `{ textDocument, position, formattingOptions, context }` | Array `[item,...]` or `{ items: [...] }` (items include `insertText`, `range`, optional `command`, optional `uuid`) |
+| Next Edit Suggestions (NES) | `textDocument/copilotInlineEdit` | Position params + `textDocument.version`                 | `{ edits: [ { textDocument, range, text, command?, uuid? } ] }`                                                     |
+
+If you want, I can:
+
+- Produce JSON Schema files for the two methods (`inlineCompletion` item, `copilotInlineEdit` NesEdit), or
+- Add minimal example server stubs (Node/TS or simple JSON-RPC) that implement these two endpoints for local testing.
+
+Which would you like next?
