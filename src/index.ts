@@ -31,6 +31,7 @@ let SELECTED_MODEL: string | undefined = undefined;
 interface CompletionData {
   index: number;
   model: string;
+  reason: string;
 }
 
 const connection = createConnection(ProposedFeatures.all);
@@ -157,11 +158,23 @@ connection.onCompletion(
 
     log('info', `Completions ${JSON.stringify(completions)}`);
 
-    const items: CompletionItem[] = completions!.map((text, index) => ({
-      label: text,
-      kind: CompletionItemKind.Text,
-      data: { index, model: SELECTED_MODEL } as CompletionData,
-    }));
+    // `completions` is now an array of { text, reason } objects. Map them to
+    // CompletionItems. Use the first line of the text as the label so items
+    // remain concise. Put the model reason into `detail` (fall back to the
+    // previous model label when reason is empty).
+    const items: CompletionItem[] = (completions || [])
+      .map((c, index) => {
+        const text = (c as any).text ?? String(c);
+        const reason = (c as any).reason ?? '';
+        const label = String(text).split('\n')[0];
+        return {
+          label,
+          kind: CompletionItemKind.Text,
+          text,
+          data: { index, model: SELECTED_MODEL, reason } as CompletionData,
+        } as CompletionItem;
+      })
+      .filter(Boolean);
 
     log('info', `Returning ${items.length} completion items`);
     if (items.length > 0)
@@ -178,7 +191,7 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
   );
   const data = item.data as CompletionData;
   if (data && data.model) {
-    item.detail = `ai-lsp (${data.model})`;
+    item.detail = `${data.reason} (${data.model})`;
   }
   return item;
 });
