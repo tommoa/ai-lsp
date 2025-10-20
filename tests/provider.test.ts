@@ -1,6 +1,6 @@
 // @ts-nocheck
 import assert from 'node:assert/strict';
-import { createProvider, clearProviderCache } from '../src/provider';
+import { createProvider, clearProviderCache } from '../src/provider/provider';
 
 const originalFetch = globalThis.fetch;
 
