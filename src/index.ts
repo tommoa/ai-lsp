@@ -152,7 +152,6 @@ connection.onCompletion(
       provider(SELECTED_MODEL!)!,
       documents.get(pos.textDocument.uri)!,
       pos,
-      5,
       log,
     );
 

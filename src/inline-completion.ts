@@ -14,7 +14,6 @@ export namespace InlineCompletion {
     model: LanguageModel,
     document: TextDocument,
     position: TextDocumentPositionParams,
-    completions?: number,
     log?: Log,
   ): Promise<Completion[] | null> {
     using _ = time(log!, 'info', 'InlineCompletion.generate');
@@ -29,7 +28,6 @@ export namespace InlineCompletion {
 
     const prompt: string =
       `language: ${document.languageId ?? 'text'}\n` +
-      `completions: ${completions ?? 5}\n\n` +
       textBefore +
       '<cursor>' +
       textAfter;

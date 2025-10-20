@@ -18,5 +18,3 @@ RULES:
 - Match the existing indentation and line endings.
 - If multiple plausible completions exist, prefer the shortest idiomatic
   completion that typechecks/parse-checks locally.
-- The user will tell you how many `completions` to produce using the key
-  `completions`.
