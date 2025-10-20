@@ -21,7 +21,7 @@
  *   uniquely to a document location are skipped to avoid unsafe edits.
  */
 
-import { Log, time } from './util';
+import { Log, time, Parser } from './util';
 import { type LanguageModel } from 'ai';
 import { generateText } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
@@ -113,31 +113,7 @@ export namespace NextEdit {
       : undefined;
     log?.('debug', `parseLLMResponse rawLen=${raw.length}`);
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      // Try to find a JSON array substring in the output. This is a
-      // best-effort recovery for model outputs that include explanatory text.
-      try {
-        const start = raw.indexOf('[');
-        const end = raw.lastIndexOf(']');
-        if (start === -1 || end === -1) throw new Error('Invalid JSON');
-        const sub = raw.slice(start, end + 1);
-        parsed = JSON.parse(sub);
-      } catch (err) {
-        log?.('error', `parseLLMResponse JSON parse error`);
-        timer?.stop();
-        throw err as Error;
-      }
-    }
-
-    if (!Array.isArray(parsed)) {
-      const err = new Error('LLM response not an array');
-      log?.('error', `parseLLMResponse: ${String(err)}`);
-      timer?.stop();
-      throw err;
-    }
+    const parsed = Parser.parseResponse(raw, log);
 
     const hints: LLMHint[] = [];
     for (const item of parsed) {
