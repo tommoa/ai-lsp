@@ -247,7 +247,7 @@ export class ProviderRegistry {
     };
 
     const project = findEnv(projectCandidates);
-    const location = findEnv(locationCandidates) ?? 'us-east5';
+    const location = findEnv(locationCandidates) ?? 'global';
 
     if (!project) return {};
     return { project, location };
