@@ -237,6 +237,7 @@ async function runModelBenchmark(opts: {
           edits = await NextEdit.generate({
             model: languageModel,
             document: docObj,
+            log: console.log,
             generateFn: generateWrapper,
           });
         } catch (e) {
