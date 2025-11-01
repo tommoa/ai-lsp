@@ -49,8 +49,9 @@ export namespace Parser {
    * @throws when parsing fails
    */
   export function parseResponse(raw: string, log?: Log): any[] {
-    using _ = time(log!,
-      'info', 'parseResponse processing response', { rawLength: raw.length });
+    using _ = time(log!, 'info', 'parseResponse processing response', {
+      rawLength: raw.length,
+    });
     let parsed: [];
     try {
       parsed = JSON.parse(raw);

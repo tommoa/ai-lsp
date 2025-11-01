@@ -23,7 +23,7 @@
 
 import { Log, time, Parser } from './util';
 import { type LanguageModel } from 'ai';
-import { generateText } from 'ai';
+import { generateText, type CoreMessage } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
 import PROMPT from '../prompt/next-edit.txt';
@@ -283,14 +283,13 @@ export namespace NextEdit {
 
   /**
    * Type for generate function used to call the language model. The function
-   * should accept an object containing the `model`, `prompt`, and optional
-   * `system` prompt and return a promise that resolves to an object with a
-   * `.text` property (or any other shape parseable by `parseLLMResponse`).
+   * should accept an object containing the `model` and `messages` array and
+   * return a promise that resolves to an object with a `.text` property
+   * (or any other shape parseable by `parseLLMResponse`).
    */
   export type GenerateFn = (params: {
     model: LanguageModel;
-    prompt: string;
-    system?: string;
+    messages: CoreMessage[];
   }) => Promise<{ text?: string } | unknown>;
 
   /**
@@ -322,19 +321,27 @@ export namespace NextEdit {
 
     log?.('debug', `requestLLMHints language=${document.languageId}`);
 
-    // Build a compact prompt body containing the language hint and full
-    // document text. We normalize newlines for prompt stability.
+    // Build messages array containing system instructions, language hint,
+    // and full document text. We normalize newlines for prompt stability.
     const docText = normalizeNewlines(document.getText());
-    const promptBody =
-      `language: ${document.languageId || 'text'}\n\n` + docText;
+    const messages: CoreMessage[] = [
+      { role: 'system', content: PROMPT },
+      {
+        role: 'user',
+        content: `Language: ${document.languageId || 'text'}`,
+      },
+      {
+        role: 'user',
+        content: `File content:\n${docText}`,
+      },
+      {
+        role: 'user',
+        content: 'Suggest the next edits for this file.',
+      },
+    ];
 
     try {
-      const params = { model, prompt: promptBody } as {
-        model: LanguageModel;
-        prompt: string;
-        system?: string;
-      };
-      if (PROMPT) params.system = PROMPT;
+      const params = { model, messages };
 
       // Call the injected generate function (defaults to ai.generateText).
       const res = await gen(params as any);

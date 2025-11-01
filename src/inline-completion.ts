@@ -2,7 +2,8 @@
 // guard-rails.
 import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { generateText, LanguageModel } from 'ai';
+import { generateText, type LanguageModel } from 'ai';
+import type { CoreMessage } from 'ai';
 import { Log, time, Parser } from './util';
 
 import INLINE_COMPLETION_PROMPT from '../prompt/inline-completion.txt';
@@ -26,19 +27,32 @@ export namespace InlineCompletion {
       textAfter = docText.slice(offset);
     }
 
-    const prompt: string =
-      `language: ${document.languageId ?? 'text'}\n` +
-      textBefore +
-      '<cursor>' +
-      textAfter;
+    const messages: CoreMessage[] = [
+      { role: 'system', content: INLINE_COMPLETION_PROMPT },
+      {
+        role: 'user',
+        content: `Language: ${document.languageId ?? 'text'}`,
+      },
+      {
+        role: 'user',
+        content: `Content before cursor:\n${textBefore}`,
+      },
+      {
+        role: 'user',
+        content: `Content after cursor:\n${textAfter}`,
+      },
+      {
+        role: 'user',
+        content: 'Provide completion suggestions for the cursor position.',
+      },
+    ];
 
-    log?.('debug', prompt);
+    log?.('debug', JSON.stringify(messages));
 
     try {
       const { text } = await generateText({
         model,
-        system: INLINE_COMPLETION_PROMPT,
-        prompt,
+        messages,
         maxOutputTokens: 1000,
       });
 
@@ -65,11 +79,9 @@ export namespace InlineCompletion {
 
       return normalized;
     } catch (err) {
-      log?.(
-        'error',
-        'InlineCompletion: text generation failed',
-        { err: String(err) },
-      );
+      log?.('error', 'InlineCompletion: text generation failed', {
+        err: String(err),
+      });
       return null;
     }
   }

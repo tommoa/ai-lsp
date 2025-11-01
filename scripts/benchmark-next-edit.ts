@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { NextEdit } from '../src/next-edit';
 import { createProvider } from '../src/provider/provider';
-import { generateText } from 'ai';
+import { generateText, type CoreMessage } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 // Simple benchmark for NextEdit.generate with critic scoring.
@@ -117,10 +117,11 @@ async function rateChange(
 
     for (let attempt = 0; attempt < criticRetries; attempt++) {
       try {
+        const messages: CoreMessage[] = [{ role: 'user', content: promptText }];
         const start = Date.now();
         const res = await generateText({
           model: criticModelObj,
-          prompt: promptText,
+          messages,
         });
         const latencyMs = Date.now() - start;
         const criticRaw = (res as any)?.text ?? String(res ?? '');

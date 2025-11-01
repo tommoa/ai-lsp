@@ -5,7 +5,7 @@ import os from 'os';
 import { spawnSync } from 'child_process';
 import { NextEdit } from '../src/next-edit';
 import { createProvider } from '../src/provider/provider';
-import { generateText } from 'ai';
+import { generateText, type CoreMessage } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
 function usage(): void {
@@ -357,9 +357,12 @@ async function main(): Promise<void> {
       let criticRaw: string | null = null;
       for (let attempt = 0; attempt < criticRetries; attempt++) {
         try {
+          const messages: CoreMessage[] = [
+            { role: 'user', content: promptText },
+          ];
           const res = await generateText({
             model: criticModelObj,
-            prompt: promptText,
+            messages,
           });
           criticRaw = (res as any)?.text ?? String(res ?? '');
           const genDir = path.resolve(process.cwd(), 'generated');
