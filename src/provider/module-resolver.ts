@@ -14,6 +14,26 @@ import { execSync } from 'child_process';
 import type { Log } from '../util';
 
 /**
+ * ModelCost describes the pricing for a model in dollars per million tokens.
+ * Includes input and output costs, with optional caching costs.
+ */
+export interface ModelCost {
+  input: number; // dollars per million input tokens
+  output: number; // dollars per million output tokens
+  cache_read?: number; // dollars per million cache read tokens
+  cache_write?: number; // dollars per million cache write tokens
+}
+
+/**
+ * ModelInfo describes a model with its cost information.
+ */
+export interface ModelInfo {
+  id: string;
+  name?: string;
+  cost?: ModelCost;
+}
+
+/**
  * ProviderManifest describes a provider entry as discovered from the
  * models.dev index. Fields are intentionally permissive because manifests
  * can vary between providers.
@@ -28,8 +48,8 @@ export interface ProviderManifest {
   api?: string;
   /** human-friendly provider name */
   name?: string;
-  /** model mapping: local name -> { id, name? } */
-  models?: Record<string, { id: string; name?: string }>;
+  /** model mapping: local name -> { id, name?, cost? } */
+  models?: Record<string, ModelInfo>;
 }
 
 /**

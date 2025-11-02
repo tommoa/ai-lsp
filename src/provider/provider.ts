@@ -5,6 +5,7 @@ import {
   type FactoryModule,
   type ProviderFactory,
   type ProviderManifest,
+  type ModelCost,
 } from './module-resolver';
 import type { Log } from '../util';
 import { time } from '../util';
@@ -57,6 +58,22 @@ export class ProviderRegistry {
 
   async resolveManifest(providerId: string, log?: Log) {
     return this.moduleResolver.resolveManifest(providerId, log);
+  }
+
+  /**
+   * Get the cost information for a specific model from the provider's
+   * manifest. Returns undefined if cost data is unavailable.
+   */
+  async getModelCost(
+    providerId: string,
+    modelName: string,
+    log?: Log,
+  ): Promise<ModelCost | undefined> {
+    const manifest = await this.resolveManifest(providerId, log);
+    if (!manifest?.models) return undefined;
+
+    const modelInfo = manifest.models[modelName];
+    return modelInfo?.cost;
   }
 
   /**
@@ -339,4 +356,16 @@ export async function createProvider(
  */
 export function clearProviderCache(key?: string) {
   defaultRegistry.clearCache(key);
+}
+
+/**
+ * getModelCostInfo is a convenience wrapper to fetch cost information
+ * for a model from the default registry.
+ */
+export async function getModelCostInfo(
+  providerId: string,
+  modelName: string,
+  log?: Log,
+): Promise<ModelCost | undefined> {
+  return defaultRegistry.getModelCost(providerId, modelName, log);
 }
