@@ -1,0 +1,122 @@
+import { describe, it, expect } from 'bun:test';
+import { NextEditLineNum } from '../src/next-edit-linenum';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+
+describe('NextEditLineNum', () => {
+  describe('parseLLMResponse', () => {
+    it('should parse valid line-number hints', () => {
+      const raw = JSON.stringify([
+        {
+          startLine: 1,
+          endLine: 1,
+          text: 'console.log("updated");',
+          reason: 'update statement',
+        },
+        { startLine: 3, endLine: 5, text: 'new code here', reason: 'insert' },
+      ]);
+      const hints = NextEditLineNum.parseLLMResponse(raw, console.log);
+      expect(hints).toHaveLength(2);
+      expect(hints[0]!.startLine).toBe(1);
+      expect(hints[0]!.endLine).toBe(1);
+      expect(hints[1]!.startLine).toBe(3);
+      expect(hints[1]!.endLine).toBe(5);
+    });
+
+    it('should normalize newlines in text', () => {
+      const raw = JSON.stringify([
+        { startLine: 1, endLine: 1, text: 'line1\r\nline2', reason: 'test' },
+      ]);
+      const hints = NextEditLineNum.parseLLMResponse(raw, console.log);
+      expect(hints[0]!.text).toBe('line1\nline2');
+    });
+
+    it('should throw on invalid hint shape', () => {
+      const raw = JSON.stringify([{ startLine: 1 }]); // missing endLine, text
+      expect(() => NextEditLineNum.parseLLMResponse(raw)).toThrow();
+    });
+
+    it('should extract JSON from wrapped response', () => {
+      const raw =
+        'Here is my suggestion: ' +
+        JSON.stringify([{ startLine: 1, endLine: 1, text: 'new' }]) +
+        ' This is good.';
+      const hints = NextEditLineNum.parseLLMResponse(raw, console.log);
+      expect(hints).toHaveLength(1);
+      expect(hints[0]!.text).toBe('new');
+    });
+  });
+
+  describe('convertLLMHintsToEdits', () => {
+    it('should convert valid line ranges to edits', () => {
+      const docText = 'line 1\nline 2\nline 3\nline 4\nline 5';
+      const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
+
+      const hints: NextEditLineNum.LLMHint[] = [
+        { startLine: 2, endLine: 2, text: 'modified line 2', reason: 'test' },
+        {
+          startLine: 4,
+          endLine: 5,
+          text: 'combined line',
+          reason: 'test',
+        },
+      ];
+
+      const edits = NextEditLineNum.convertLLMHintsToEdits({
+        document: doc,
+        hints,
+      });
+      expect(edits).toHaveLength(2);
+      expect(edits[0]!.text).toBe('modified line 2');
+      expect(edits[1]!.text).toBe('combined line');
+    });
+
+    it('should skip invalid line numbers', () => {
+      const docText = 'line 1\nline 2\nline 3';
+      const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
+
+      const hints: NextEditLineNum.LLMHint[] = [
+        { startLine: 1, endLine: 1, text: 'ok', reason: 'test' },
+        { startLine: 10, endLine: 10, text: 'out of range', reason: 'test' },
+        { startLine: 2, endLine: 1, text: 'invalid range', reason: 'test' },
+      ];
+
+      const edits = NextEditLineNum.convertLLMHintsToEdits({
+        document: doc,
+        hints,
+      });
+      expect(edits).toHaveLength(1);
+      expect(edits[0]!.text).toBe('ok');
+    });
+
+    it('should handle single-line documents', () => {
+      const docText = 'single line';
+      const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
+
+      const hints: NextEditLineNum.LLMHint[] = [
+        { startLine: 1, endLine: 1, text: 'replaced', reason: 'test' },
+      ];
+
+      const edits = NextEditLineNum.convertLLMHintsToEdits({
+        document: doc,
+        hints,
+      });
+      expect(edits).toHaveLength(1);
+      expect(edits[0]!.text).toBe('replaced');
+    });
+
+    it('should preserve reason field', () => {
+      const docText = 'line 1\nline 2';
+      const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
+
+      const hints: NextEditLineNum.LLMHint[] = [
+        { startLine: 1, endLine: 1, text: 'new', reason: 'fix typo' },
+      ];
+
+      const edits = NextEditLineNum.convertLLMHintsToEdits({
+        document: doc,
+        hints,
+      });
+      expect(edits[0]!.reason).toBe('fix typo');
+    });
+  });
+});
