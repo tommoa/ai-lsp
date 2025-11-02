@@ -11,19 +11,15 @@ import path from 'path';
 
 function usage(): void {
   console.log(
-    'Usage: bun run scripts/analyze-ab-results.ts --results <path-to-json>',
+    'Usage: bun run scripts/analyze-ab-results.ts --results <path-to-json> ' +
+      '[--model <model-name>]',
   );
   console.log('');
-  console.log('The JSON file should contain benchmark results in this format:');
-  console.log('{');
-  console.log('  "baseline": {');
-  console.log('    "scores": [100, 95, 98],');
-  console.log('    "genLatencies": [123, 145, 156],');
-  console.log('    "genTokens": [450, 460, 470],');
-  console.log('    "genCosts": [0.001, 0.002, 0.003]');
-  console.log('  },');
-  console.log('  "linenum": { ... }');
-  console.log('}');
+  console.log('The JSON file should contain benchmark results exported from');
+  console.log('benchmark-next-edit-ab.ts using --export-json flag.');
+  console.log('');
+  console.log('Use --model to specify which model to analyze (optional).');
+  console.log('If not specified, will analyze the first model found.');
   process.exit(1);
 }
 
@@ -33,6 +29,7 @@ function parseArgs(): Record<string, string | undefined> {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--results') out.results = argv[++i];
+    else if (a === '--model') out.model = argv[++i];
     else usage();
   }
   return out;
@@ -41,7 +38,8 @@ function parseArgs(): Record<string, string | undefined> {
 type AnalysisData = {
   scores: number[];
   genLatencies: number[];
-  genTokens: number[];
+  genTokensInput: number[];
+  genTokensOutput: number[];
   genCosts: number[];
 };
 
@@ -152,19 +150,63 @@ function main(): void {
   }
 
   const content = fs.readFileSync(resultsPath, 'utf8');
-  let results: ResultsFile;
+  let rawResults: Record<string, any>;
   try {
-    results = JSON.parse(content);
+    rawResults = JSON.parse(content);
   } catch (e) {
     console.error('Failed to parse JSON:', String(e));
     process.exit(1);
   }
 
-  const baseline = results.baseline;
-  const linenum = results.linenum;
+  // New format: keys are "model:approach"
+  // Extract model names
+  const modelNames = new Set<string>();
+  for (const key of Object.keys(rawResults)) {
+    if (key.includes(':')) {
+      const [modelName] = key.split(':');
+      modelNames.add(modelName!);
+    }
+  }
+
+  if (modelNames.size === 0) {
+    console.error(
+      'No valid results found. Expected format: "model:approach" keys',
+    );
+    process.exit(1);
+  }
+
+  // Select model to analyze
+  const requestedModel = args.model;
+  let selectedModel: string;
+
+  if (requestedModel) {
+    if (!modelNames.has(requestedModel)) {
+      console.error(`Model "${requestedModel}" not found in results.`);
+      console.error(`Available models: ${Array.from(modelNames).join(', ')}`);
+      process.exit(1);
+    }
+    selectedModel = requestedModel;
+  } else {
+    selectedModel = Array.from(modelNames)[0]!;
+    if (modelNames.size > 1) {
+      console.log(`Multiple models found. Analyzing: ${selectedModel}`);
+      console.log(
+        `Use --model to specify: ${Array.from(modelNames).join(', ')}\n`,
+      );
+    }
+  }
+
+  // Extract baseline and linenum for selected model
+  const baselineKey = `${selectedModel}:baseline`;
+  const linenumKey = `${selectedModel}:linenum`;
+
+  const baseline = rawResults[baselineKey];
+  const linenum = rawResults[linenumKey];
 
   if (!baseline || !linenum) {
-    console.error('Results must contain both "baseline" and "linenum" data');
+    console.error(
+      `Model "${selectedModel}" must have both baseline and linenum results`,
+    );
     process.exit(1);
   }
 
@@ -212,29 +254,44 @@ function main(): void {
 
   // Token Usage Analysis
   console.log('\n━━━ TOKEN USAGE ━━━');
-  printStats('Baseline', baseline.genTokens, ' tokens');
-  console.log();
-  printStats('LineNum', linenum.genTokens, ' tokens');
 
-  if (baseline.genTokens.length > 1 && linenum.genTokens.length > 1) {
-    const meanDiff = mean(baseline.genTokens) - mean(linenum.genTokens);
-    const pctDiff = ((meanDiff / mean(baseline.genTokens)) * 100).toFixed(1);
+  const baselineTokens = baseline.genTokensInput.map(
+    (inp: number, i: number) => inp + (baseline.genTokensOutput[i] ?? 0),
+  );
+  const linenumTokens = linenum.genTokensInput.map(
+    (inp: number, i: number) => inp + (linenum.genTokensOutput[i] ?? 0),
+  );
+
+  printStats('Baseline', baselineTokens, ' tokens');
+  console.log();
+  printStats('LineNum', linenumTokens, ' tokens');
+
+  if (baselineTokens.length > 1 && linenumTokens.length > 1) {
+    const meanDiff = mean(baselineTokens) - mean(linenumTokens);
+    const pctDiff = ((meanDiff / mean(baselineTokens)) * 100).toFixed(1);
     console.log(
       `\nMean difference: ${meanDiff.toFixed(0)} tokens (${pctDiff}%)`,
     );
   }
 
-  // Cost Analysis
-  if (baseline.genCosts.length > 0 && linenum.genCosts.length > 0) {
-    console.log('\n━━━ GENERATION COST ($) ━━━');
-    printStats('Baseline', baseline.genCosts, ' $');
-    console.log();
-    printStats('LineNum', linenum.genCosts, ' $');
+  // Detailed input/output breakdown
+  console.log('\n━━━ DETAILED TOKEN BREAKDOWN ━━━');
+  console.log('\nBaseline:');
+  printStats('  Input Tokens', baseline.genTokensInput, ' tokens');
+  printStats('  Output Tokens', baseline.genTokensOutput, ' tokens');
+  console.log('\nLineNum:');
+  printStats('  Input Tokens', linenum.genTokensInput, ' tokens');
+  printStats('  Output Tokens', linenum.genTokensOutput, ' tokens');
 
-    const meanDiff = mean(baseline.genCosts) - mean(linenum.genCosts);
-    const pctDiff = ((meanDiff / mean(baseline.genCosts)) * 100).toFixed(1);
-    console.log(`\nMean difference: $${meanDiff.toFixed(6)} (${pctDiff}%)`);
-  }
+  // Cost Analysis
+  console.log('\n━━━ GENERATION COST ($) ━━━');
+  printStats('Baseline', baseline.genCosts, ' $');
+  console.log();
+  printStats('LineNum', linenum.genCosts, ' $');
+
+  const meanDiff = mean(baseline.genCosts) - mean(linenum.genCosts);
+  const pctDiff = ((meanDiff / mean(baseline.genCosts)) * 100).toFixed(1);
+  console.log(`\nMean difference: $${meanDiff.toFixed(6)} (${pctDiff}%)`);
 
   // Summary
   console.log('\n' + '═'.repeat(60));
@@ -251,8 +308,8 @@ function main(): void {
   const latencyWinner =
     baselineLatencyMean < linenumLatencyMean ? 'Baseline' : 'LineNum';
 
-  const baselineTokenMean = mean(baseline.genTokens);
-  const linenumTokenMean = mean(linenum.genTokens);
+  const baselineTokenMean = mean(baselineTokens);
+  const linenumTokenMean = mean(linenumTokens);
   const tokenWinner =
     baselineTokenMean < linenumTokenMean ? 'Baseline' : 'LineNum';
 
