@@ -21,6 +21,11 @@ M.configs['ai-lsp'] = {
       },
     },
     model = "google/gemini-flash-latest",
+    next_edit = {
+      -- Optional: override model for next-edit
+      -- model = "google/gemini-pro-latest",
+      prompt = "prefix_suffix",  -- or "line_number"
+    },
   },
   cmd = { 'ai-lsp', '--stdio' },
 }

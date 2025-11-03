@@ -1,33 +1,20 @@
 /**
- * next-edit-linenum: generate and convert LLM edit hints using line numbers.
+ * Line-number based edit hints: generate and convert LLM edit hints using
+ * line numbers.
  *
- * This is a variant of next-edit.ts that uses line-number prefixes
- * (L1:, L2:, ...) instead of prefix/suffix anchoring. The LLM returns
- * line ranges instead of context strings, which may be simpler and more
- * robust for certain codebases.
- *
- * Public API
- * - parseLLMResponse(raw, log): parse raw LLM output into LLMHint[]
- * - convertLLMHintsToEdits({document,hints}, log): map hints to LspEdit[]
- * - requestLLMHints({model,document,log,generateFn}): call the model
- * - generate({model,document,log,generateFn}): convenience wrapper
- *
- * Notes
- * - Line numbers are 1-based (matching typical editor conventions).
- * - The module is model-agnostic: callers supply a prepared
- *   `ai.LanguageModel` instance and may inject a custom `generateFn`.
- * - Conversion is intentionally conservative. Hints that cannot be mapped
- *   to valid line ranges are skipped to avoid unsafe edits.
+ * This implementation uses line-number prefixes (L1:, L2:, ...) instead of
+ * prefix/suffix anchoring. The LLM returns line ranges instead of context
+ * strings, which may be simpler and more robust for certain codebases.
  */
 
-import { Log, time, Parser } from './util';
+import { Log, time, Parser } from '../util';
 import { type LanguageModel } from 'ai';
 import { generateText, type CoreMessage } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
-import PROMPT from '../prompt/next-edit-linenum.txt';
+import PROMPT from '../../prompt/next-edit-linenum.txt';
 
-export namespace NextEditLineNum {
+export namespace LineNumber {
   /**
    * A hint describing an edit using line number ranges.
    *
@@ -94,8 +81,8 @@ export namespace NextEditLineNum {
    * @throws when parsing fails or an item does not match the expected shape
    */
   export function parseLLMResponse(raw: string, log?: Log): LLMHint[] {
-    const timer = log
-      ? time(log, 'info', 'next-edit-linenum.parseLLMResponse')
+    using _timer = log
+      ? time(log, 'info', 'next-edit.line-number.parseLLMResponse')
       : undefined;
     log?.('debug', `parseLLMResponse rawLen=${raw.length}`);
 
@@ -106,7 +93,6 @@ export namespace NextEditLineNum {
       if (typeof item !== 'object' || item === null) {
         const err = new Error('Invalid hint shape from LLM');
         log?.('error', `parseLLMResponse: ${String(err)}`);
-        timer?.stop();
         throw err;
       }
 
@@ -122,7 +108,6 @@ export namespace NextEditLineNum {
           'error',
           `parseLLMResponse: ${String(err)} - ` + `item=${clip(itemStr)}`,
         );
-        timer?.stop();
         throw err;
       }
 
@@ -135,7 +120,6 @@ export namespace NextEditLineNum {
     }
 
     log?.('info', `parseLLMResponse parsed=${hints.length}`);
-    timer?.stop();
     return hints;
   }
 
@@ -158,8 +142,8 @@ export namespace NextEditLineNum {
     const uri = (document as { uri?: string }).uri ?? '';
     const doc = rawDoc;
 
-    const timer = log
-      ? time(log, 'info', 'next-edit-linenum.convertLLMHintsToEdits', {
+    using _timer = log
+      ? time(log, 'info', 'next-edit.line-number.convertLLMHintsToEdits', {
           hints: hints.length,
           uri,
         })
@@ -229,7 +213,6 @@ export namespace NextEditLineNum {
     }
 
     log?.('info', `convertLLMHintsToEdits produced=${edits.length}`);
-    timer?.stop();
     return edits;
   }
 
@@ -260,9 +243,12 @@ export namespace NextEditLineNum {
     generateFn?: GenerateFn;
   }): Promise<LLMHint[]> {
     const { model, document, log, generateFn } = opts;
-    const gen = generateFn ?? (async (p: any) => await generateText(p));
-    const timer = log
-      ? time(log, 'info', 'next-edit-linenum.requestLLMHints')
+    const gen =
+      generateFn ??
+      (async (p: { model: LanguageModel; messages: CoreMessage[] }) =>
+        await generateText(p));
+    using _timer = log
+      ? time(log, 'info', 'next-edit.line-number.requestLLMHints')
       : undefined;
     if (!model) throw new Error('No model provided');
 
@@ -288,23 +274,17 @@ export namespace NextEditLineNum {
       },
     ];
 
-    try {
-      const params = { model, messages };
-      const res = await gen(params as any);
-      const rawOutput = (res as any)?.text ?? JSON.stringify(res);
+    const params = { model, messages };
+    const res = await gen(params);
+    const rawOutput = (res as { text?: string }).text ?? JSON.stringify(res);
 
-      log?.(
-        'debug',
-        `requestLLMHints rawOutputLen=${String(rawOutput).length} ` +
-          `preview=${clip(String(rawOutput))}`,
-      );
-      const hints = parseLLMResponse(String(rawOutput), log);
-      timer?.stop();
-      return hints;
-    } catch (e) {
-      timer?.stop();
-      throw e;
-    }
+    log?.(
+      'debug',
+      `requestLLMHints rawOutputLen=${String(rawOutput).length} ` +
+        `preview=${clip(String(rawOutput))}`,
+    );
+    const hints = parseLLMResponse(String(rawOutput), log);
+    return hints;
   }
 
   /**

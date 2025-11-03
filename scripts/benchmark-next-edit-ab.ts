@@ -2,7 +2,6 @@
 import fs from 'fs';
 import path from 'path';
 import { NextEdit } from '../src/next-edit';
-import { NextEditLineNum } from '../src/next-edit-linenum';
 import { createProvider, getModelCostInfo } from '../src/provider/provider';
 import { generateText, type CoreMessage } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -386,21 +385,15 @@ async function runApproachBenchmark(opts: {
         let edits: any[] = [];
 
         try {
-          if (approach === 'baseline') {
-            edits = await NextEdit.generate({
-              model: languageModel,
-              document: docObj,
-              log: console.log,
-              generateFn: generateWrapper,
-            });
-          } else {
-            edits = await NextEditLineNum.generate({
-              model: languageModel,
-              document: docObj,
-              log: console.log,
-              generateFn: generateWrapper,
-            });
-          }
+          const prompt =
+            approach === 'baseline' ? 'prefix_suffix' : 'line_number';
+          edits = await NextEdit.generate({
+            model: languageModel,
+            document: docObj,
+            prompt,
+            log: console.log,
+            generateFn: generateWrapper,
+          });
           parseSuccess = true;
           validHintCount = edits?.length ?? 0;
           hintCount = validHintCount;

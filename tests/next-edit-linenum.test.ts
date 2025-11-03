@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'bun:test';
-import { NextEditLineNum } from '../src/next-edit-linenum';
+import { LineNumber } from '../src/next-edit/line-number';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-describe('NextEditLineNum', () => {
+describe('LineNumber', () => {
   describe('parseLLMResponse', () => {
     it('should parse valid line-number hints', () => {
       const raw = JSON.stringify([
@@ -14,7 +14,7 @@ describe('NextEditLineNum', () => {
         },
         { startLine: 3, endLine: 5, text: 'new code here', reason: 'insert' },
       ]);
-      const hints = NextEditLineNum.parseLLMResponse(raw, console.log);
+      const hints = LineNumber.parseLLMResponse(raw, console.log);
       expect(hints).toHaveLength(2);
       expect(hints[0]!.startLine).toBe(1);
       expect(hints[0]!.endLine).toBe(1);
@@ -26,13 +26,13 @@ describe('NextEditLineNum', () => {
       const raw = JSON.stringify([
         { startLine: 1, endLine: 1, text: 'line1\r\nline2', reason: 'test' },
       ]);
-      const hints = NextEditLineNum.parseLLMResponse(raw, console.log);
+      const hints = LineNumber.parseLLMResponse(raw, console.log);
       expect(hints[0]!.text).toBe('line1\nline2');
     });
 
     it('should throw on invalid hint shape', () => {
       const raw = JSON.stringify([{ startLine: 1 }]); // missing endLine, text
-      expect(() => NextEditLineNum.parseLLMResponse(raw)).toThrow();
+      expect(() => LineNumber.parseLLMResponse(raw)).toThrow();
     });
 
     it('should extract JSON from wrapped response', () => {
@@ -40,7 +40,7 @@ describe('NextEditLineNum', () => {
         'Here is my suggestion: ' +
         JSON.stringify([{ startLine: 1, endLine: 1, text: 'new' }]) +
         ' This is good.';
-      const hints = NextEditLineNum.parseLLMResponse(raw, console.log);
+      const hints = LineNumber.parseLLMResponse(raw, console.log);
       expect(hints).toHaveLength(1);
       expect(hints[0]!.text).toBe('new');
     });
@@ -51,7 +51,7 @@ describe('NextEditLineNum', () => {
       const docText = 'line 1\nline 2\nline 3\nline 4\nline 5';
       const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
 
-      const hints: NextEditLineNum.LLMHint[] = [
+      const hints: LineNumber.LLMHint[] = [
         { startLine: 2, endLine: 2, text: 'modified line 2', reason: 'test' },
         {
           startLine: 4,
@@ -61,7 +61,7 @@ describe('NextEditLineNum', () => {
         },
       ];
 
-      const edits = NextEditLineNum.convertLLMHintsToEdits({
+      const edits = LineNumber.convertLLMHintsToEdits({
         document: doc,
         hints,
       });
@@ -74,13 +74,13 @@ describe('NextEditLineNum', () => {
       const docText = 'line 1\nline 2\nline 3';
       const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
 
-      const hints: NextEditLineNum.LLMHint[] = [
+      const hints: LineNumber.LLMHint[] = [
         { startLine: 1, endLine: 1, text: 'ok', reason: 'test' },
         { startLine: 10, endLine: 10, text: 'out of range', reason: 'test' },
         { startLine: 2, endLine: 1, text: 'invalid range', reason: 'test' },
       ];
 
-      const edits = NextEditLineNum.convertLLMHintsToEdits({
+      const edits = LineNumber.convertLLMHintsToEdits({
         document: doc,
         hints,
       });
@@ -92,11 +92,11 @@ describe('NextEditLineNum', () => {
       const docText = 'single line';
       const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
 
-      const hints: NextEditLineNum.LLMHint[] = [
+      const hints: LineNumber.LLMHint[] = [
         { startLine: 1, endLine: 1, text: 'replaced', reason: 'test' },
       ];
 
-      const edits = NextEditLineNum.convertLLMHintsToEdits({
+      const edits = LineNumber.convertLLMHintsToEdits({
         document: doc,
         hints,
       });
@@ -108,11 +108,11 @@ describe('NextEditLineNum', () => {
       const docText = 'line 1\nline 2';
       const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
 
-      const hints: NextEditLineNum.LLMHint[] = [
+      const hints: LineNumber.LLMHint[] = [
         { startLine: 1, endLine: 1, text: 'new', reason: 'fix typo' },
       ];
 
-      const edits = NextEditLineNum.convertLLMHintsToEdits({
+      const edits = LineNumber.convertLLMHintsToEdits({
         document: doc,
         hints,
       });

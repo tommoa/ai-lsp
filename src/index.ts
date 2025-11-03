@@ -28,6 +28,33 @@ import { Level, Log, time } from './util';
 let provider: ModelSelector = (model: string) => model as any;
 let SELECTED_MODEL: string | undefined = undefined;
 
+// Mode-specific configuration
+interface ModeConfig {
+  model?: string;
+  prompt?: 'prefix_suffix' | 'line_number';
+}
+
+interface InitOptions {
+  providers?: Record<string, ProviderInitOptions>;
+  model?: string;
+  next_edit?: ModeConfig;
+  inline_completion?: ModeConfig;
+}
+
+interface NextEditConfig {
+  model: LanguageModel;
+  modelId: string;
+  prompt: 'prefix_suffix' | 'line_number';
+}
+
+interface InlineCompletionConfig {
+  model: LanguageModel;
+  modelId: string;
+}
+
+let NEXT_EDIT_CONFIG: NextEditConfig | null = null;
+let INLINE_COMPLETION_CONFIG: InlineCompletionConfig | null = null;
+
 interface CompletionData {
   index: number;
   model: string;
@@ -68,7 +95,7 @@ type ProviderInitResult = {
 };
 
 async function initProvider(
-  initOpts: Record<string, any>,
+  initOpts: InitOptions,
   log: Log,
 ): Promise<ProviderInitResult> {
   const providers =
@@ -102,15 +129,62 @@ async function initProvider(
   }
 }
 
+async function initModeConfigs(
+  initOpts: InitOptions,
+  globalProvider: ModelSelector,
+  globalModelId: string,
+  log: Log,
+): Promise<void> {
+  // Initialize next-edit config
+  const nextEditOpts = (initOpts.next_edit || {}) as ModeConfig;
+  const nextEditModelId = nextEditOpts.model || globalModelId;
+  const nextEditPrompt = nextEditOpts.prompt || 'prefix_suffix';
+
+  if (nextEditPrompt !== 'prefix_suffix' && nextEditPrompt !== 'line_number') {
+    log('warn', `Invalid next_edit.prompt: ${nextEditPrompt}, using default`);
+    NEXT_EDIT_CONFIG = {
+      model: globalProvider(nextEditModelId),
+      modelId: nextEditModelId,
+      prompt: 'prefix_suffix',
+    };
+  } else {
+    NEXT_EDIT_CONFIG = {
+      model: globalProvider(nextEditModelId),
+      modelId: nextEditModelId,
+      prompt: nextEditPrompt,
+    };
+  }
+
+  log(
+    'info',
+    `next-edit: model=${NEXT_EDIT_CONFIG.modelId}, ` +
+      `prompt=${NEXT_EDIT_CONFIG.prompt}`,
+  );
+
+  // Initialize inline-completion config
+  const inlineCompletionOpts = (initOpts.inline_completion || {}) as ModeConfig;
+  const inlineCompletionModelId = inlineCompletionOpts.model || globalModelId;
+
+  INLINE_COMPLETION_CONFIG = {
+    model: globalProvider(inlineCompletionModelId),
+    modelId: inlineCompletionModelId,
+  };
+
+  log('info', `inline-completion: model=${INLINE_COMPLETION_CONFIG.modelId}`);
+}
+
 connection.onInitialize(async (params: InitializeParams) => {
   log('info', 'LSP Server initializing...');
-  const initOpts = (params.initializationOptions || {}) as Record<string, any>;
+  const initOpts = (params.initializationOptions || {}) as InitOptions;
 
   const result = await (async () => {
     try {
       const res = await initProvider(initOpts, log);
       provider = res.factory;
       SELECTED_MODEL = res.modelId;
+
+      // Initialize mode-specific configs
+      await initModeConfigs(initOpts, provider, SELECTED_MODEL, log);
     } catch (err) {
       log('error', `Provider init failed: ${String(err)}`);
       throw err;
@@ -129,15 +203,28 @@ connection.onInitialize(async (params: InitializeParams) => {
 
 connection.onInitialized((_params: InitializedParams) => {
   log('info', 'LSP Server initialized successfully');
-  log('info', `Using AI model: ${SELECTED_MODEL}`);
+  log('info', `Global model: ${SELECTED_MODEL}`);
+  if (NEXT_EDIT_CONFIG) {
+    log(
+      'info',
+      `next-edit: ${NEXT_EDIT_CONFIG.modelId} (${NEXT_EDIT_CONFIG.prompt})`,
+    );
+  }
+  if (INLINE_COMPLETION_CONFIG) {
+    log('info', `inline-completion: ${INLINE_COMPLETION_CONFIG.modelId}`);
+  }
 
   connection.onDidChangeConfiguration(async change => {
     try {
-      const config = (change.settings || {}) as Record<string, any>;
+      const config = (change.settings || {}) as InitOptions;
       const res = await initProvider(config, log);
       provider = res.factory;
       SELECTED_MODEL = res.modelId;
-      log('info', 'Provider initialized. model=' + SELECTED_MODEL);
+
+      // Re-initialize mode configs
+      await initModeConfigs(config, provider, SELECTED_MODEL, log);
+
+      log('info', 'Configuration updated successfully');
     } catch (err) {
       log('error', 'Error handling configuration change: ' + String(err));
     }
@@ -148,8 +235,13 @@ connection.onCompletion(
   async (pos: TextDocumentPositionParams): Promise<CompletionItem[]> => {
     using _ = time(log, 'info', 'onCompletion');
 
+    if (!INLINE_COMPLETION_CONFIG) {
+      log('error', 'Inline completion config not initialized');
+      return [];
+    }
+
     const completions = await InlineCompletion.generate(
-      provider(SELECTED_MODEL!)!,
+      INLINE_COMPLETION_CONFIG.model,
       documents.get(pos.textDocument.uri)!,
       pos,
       log,
@@ -163,14 +255,18 @@ connection.onCompletion(
     // previous model label when reason is empty).
     const items: CompletionItem[] = (completions || [])
       .map((c, index) => {
-        const text = (c as any).text ?? String(c);
-        const reason = (c as any).reason ?? '';
+        const text = c.text ?? String(c);
+        const reason = c.reason ?? '';
         const label = String(text).split('\n')[0];
         return {
           label,
           kind: CompletionItemKind.Text,
           text,
-          data: { index, model: SELECTED_MODEL, reason } as CompletionData,
+          data: {
+            index,
+            model: INLINE_COMPLETION_CONFIG!.modelId,
+            reason,
+          } as CompletionData,
         } as CompletionItem;
       })
       .filter(Boolean);
@@ -209,11 +305,18 @@ connection.onRequest(
     const doc = documents.get(uri);
     if (!doc) return { edits: [] };
 
-    // Lazy import to avoid circular deps during startup
-    const model = provider(SELECTED_MODEL!)!;
+    if (!NEXT_EDIT_CONFIG) {
+      log('error', 'next-edit config not initialized');
+      return { edits: [] };
+    }
 
     try {
-      const edits = await NextEdit.generate({ model, document: doc, log });
+      const edits = await NextEdit.generate({
+        model: NEXT_EDIT_CONFIG.model,
+        document: doc,
+        prompt: NEXT_EDIT_CONFIG.prompt,
+        log,
+      });
       return { edits };
     } catch (err) {
       log('error', `copilotInlineCompletion failed: ${String(err)}`);
