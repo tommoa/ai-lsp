@@ -43,11 +43,6 @@ type AnalysisData = {
   genCosts: number[];
 };
 
-type ResultsFile = {
-  baseline?: AnalysisData;
-  linenum?: AnalysisData;
-};
-
 function mean(arr: number[]): number {
   if (arr.length === 0) return NaN;
   return arr.reduce((a, b) => a + b, 0) / arr.length;

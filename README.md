@@ -85,6 +85,50 @@ To run:
 bun run index.ts
 ```
 
+## Benchmarking
+
+You can benchmark the `next_edit` generation with different models and
+approaches:
+
+```bash
+# A/B test both approaches (default: prefix_suffix vs line_number)
+bun run scripts/benchmark.ts --file test.ts --models openai/gpt-4
+
+# Test a single approach
+bun run scripts/benchmark.ts --file test.ts --models openai/gpt-4 \
+  --approach prefix_suffix
+
+# Test with diff preview and critic scoring
+bun run scripts/benchmark.ts --file test.ts --models openai/gpt-4 \
+  --approach both --preview --critic
+
+# Export results to JSON for later analysis
+bun run scripts/benchmark.ts --file test.ts --models openai/gpt-4 \
+  --runs 10 --export-json results.json
+```
+
+### Benchmark Options
+
+- `--file <path>` - input file to benchmark (required)
+- `--models <m1,m2>` - comma-separated models to test (required)
+- `--approach <prefix_suffix|line_number|both>` - approach to test (default: both)
+- `--runs N` - number of runs per model/approach (default: 3)
+- `--concurrency N` - parallel workers (default: 2)
+- `--preview` - show colorized diffs of changes
+- `--context N` - diff context lines (default: 3, only with --preview)
+- `--no-color` - disable colored diff output
+- `--critic` - enable critic scoring for quality assessment
+- `--critic-model <model>` - model to use for critic (default: first model)
+- `--export-json <path>` - export results to JSON file
+
+### Post-Analysis
+
+After running benchmarks with `--export-json`, you can analyze the results:
+
+```bash
+bun run scripts/analyze-ab-results.ts --results results.json
+```
+
 ## FAQ
 
 ### Why is this written in TypeScript?
