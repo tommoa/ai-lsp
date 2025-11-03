@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { NextEdit } from '../src/next-edit';
 import { createProvider, getModelCostInfo } from '../src/provider/provider';
-import { generateText, type CoreMessage } from 'ai';
+import { generateText, type ModelMessage } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { ModelCost } from '../src/provider/module-resolver';
 
@@ -198,7 +198,7 @@ async function rateChange(
 
     for (let attempt = 0; attempt < criticRetries; attempt++) {
       try {
-        const messages: CoreMessage[] = [{ role: 'user', content: promptText }];
+        const messages: ModelMessage[] = [{ role: 'user', content: promptText }];
         const res = await generateText({
           model: criticModelObj,
           messages,
@@ -549,10 +549,6 @@ async function main(): Promise<void> {
       const providerId = String(modelStr.split('/')[0]);
       const modelName = modelStr.includes('/')
         ? modelStr.split('/').slice(1).join('/')
-        : '';
-      const criticProviderId = String(criticModelStr.split('/')[0]);
-      const criticModelName = criticModelStr.includes('/')
-        ? criticModelStr.split('/').slice(1).join('/')
         : '';
 
       const modelCost = await getModelCostInfo(providerId, modelName);

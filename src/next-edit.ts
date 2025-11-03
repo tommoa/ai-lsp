@@ -27,7 +27,7 @@ import { Log, time } from './util';
 import { PrefixSuffix } from './next-edit/prefix-suffix';
 import { LineNumber } from './next-edit/line-number';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { CoreMessage } from 'ai';
+import type { ModelMessage } from 'ai';
 
 export namespace NextEdit {
   /**
@@ -47,7 +47,7 @@ export namespace NextEdit {
    */
   export type GenerateFn = (params: {
     model: LanguageModel;
-    messages: CoreMessage[];
+    messages: ModelMessage[];
   }) => Promise<{ text?: string } | unknown>;
 
   /**

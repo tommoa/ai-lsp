@@ -3,7 +3,7 @@
 import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, type LanguageModel } from 'ai';
-import type { CoreMessage } from 'ai';
+import type { ModelMessage } from 'ai';
 import { Log, time, Parser } from './util';
 
 import INLINE_COMPLETION_PROMPT from '../prompt/inline-completion.txt';
@@ -27,7 +27,7 @@ export namespace InlineCompletion {
       textAfter = docText.slice(offset);
     }
 
-    const messages: CoreMessage[] = [
+    const messages: ModelMessage[] = [
       { role: 'system', content: INLINE_COMPLETION_PROMPT },
       {
         role: 'user',

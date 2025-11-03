@@ -9,7 +9,7 @@
 
 import { Log, time, Parser } from '../util';
 import { type LanguageModel } from 'ai';
-import { generateText, type CoreMessage } from 'ai';
+import { generateText, type ModelMessage } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
 import PROMPT from '../../prompt/next-edit.txt';
@@ -271,7 +271,7 @@ export namespace PrefixSuffix {
    */
   export type GenerateFn = (params: {
     model: LanguageModel;
-    messages: CoreMessage[];
+    messages: ModelMessage[];
   }) => Promise<{ text?: string } | unknown>;
 
   /**
@@ -297,7 +297,7 @@ export namespace PrefixSuffix {
     const { model, document, log, generateFn } = opts;
     const gen =
       generateFn ??
-      (async (p: { model: LanguageModel; messages: CoreMessage[] }) =>
+      (async (p: { model: LanguageModel; messages: ModelMessage[] }) =>
         await generateText(p));
     using _timer = log
       ? time(log, 'info', 'next-edit.prefix-suffix.requestLLMHints')
@@ -309,7 +309,7 @@ export namespace PrefixSuffix {
     // Build messages array containing system instructions, language hint,
     // and full document text. We normalize newlines for prompt stability.
     const docText = normalizeNewlines(document.getText());
-    const messages: CoreMessage[] = [
+    const messages: ModelMessage[] = [
       { role: 'system', content: PROMPT },
       {
         role: 'user',
