@@ -8,6 +8,7 @@ import {
   type InitializeParams,
   type InitializeResult,
   type InitializedParams,
+  type Position,
 } from 'vscode-languageserver/node';
 import { TextDocuments } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -20,6 +21,7 @@ import {
 } from './provider/provider';
 import { InlineCompletion } from './inline-completion';
 import { NextEdit } from './next-edit';
+import { extractPartialWord } from './completion-utils';
 import { Level, Log, time } from './util';
 
 // TODO: Figure out a way to ship these aruond without needing this horrible
@@ -243,14 +245,25 @@ connection.onCompletion(
       return [];
     }
 
+    const doc = documents.get(pos.textDocument.uri)!;
     const completions = await InlineCompletion.generate({
       model: INLINE_COMPLETION_CONFIG.model,
-      document: documents.get(pos.textDocument.uri)!,
+      document: doc,
       position: pos,
       log,
     });
 
     log('info', `Completions ${JSON.stringify(completions)}`);
+
+    // Extract the partial word at cursor for better filtering
+    const { partial: partialWord, startChar } = extractPartialWord(
+      doc,
+      pos.position,
+    );
+    log(
+      'debug',
+      `Partial word at cursor: "${partialWord}" startChar=${startChar}`,
+    );
 
     // `completions` is now an array of { text, reason } objects. Map them to
     // CompletionItems. Use the first line of the text as the label so items
@@ -260,11 +273,26 @@ connection.onCompletion(
       .map((c, index) => {
         const text = c.text ?? String(c);
         const reason = c.reason ?? '';
-        const label = String(text).split('\n')[0];
+
+        // Reconstruct the full text by prepending the partial word
+        const fullText = partialWord + text;
+
+        // Calculate the start position of the partial word on this line
+        const partialWordStartPos: Position = {
+          line: pos.position.line,
+          character: startChar,
+        };
+
         return {
-          label,
+          label: fullText,
           kind: CompletionItemKind.Text,
-          text,
+          textEdit: {
+            range: {
+              start: partialWordStartPos,
+              end: pos.position,
+            },
+            newText: fullText,
+          },
           data: {
             index,
             model: INLINE_COMPLETION_CONFIG!.modelId,
