@@ -1,7 +1,9 @@
 import path from 'path';
-import { createProvider } from '../src/provider/provider';
-import { generateText, type ModelMessage } from 'ai';
+import fs from 'fs';
+import { createProvider, parseModelString } from '../src/provider/provider';
+import { generateText, type ModelMessage, type LanguageModel } from 'ai';
 import type { ModelCost } from '../src/provider/module-resolver';
+import { Parser, NOOP_LOG } from '../src/util';
 
 export type TokenUsage = {
   input: number;
@@ -10,10 +12,21 @@ export type TokenUsage = {
   cachedInput?: number;
 };
 
-export type CostBreakdown = {
+export type TokenCost = {
   cost: number;
   costWithoutCache: number;
 };
+
+/**
+ * Test case for inline completion or editing benchmarks.
+ */
+export interface TestCase {
+  name: string;
+  language: string;
+  before: string;
+  after: string;
+  description?: string;
+}
 
 export type ParseErrorType =
   | 'none'
@@ -41,93 +54,147 @@ export function classifyParseError(err: unknown): ParseErrorType {
 
 export function extractTokenUsage(res: any): TokenUsage | null {
   if (!res || typeof res !== 'object') return null;
+
   const usage =
-    res.usage ?? res?.result?.usage ?? res?.token_usage ?? res?.meta?.usage;
-  if (usage) {
-    const input = usage.inputTokens;
-    const output = usage.outputTokens;
-    if (typeof input === 'number' && typeof output === 'number') {
-      const result: TokenUsage = { input, output };
-      if (
-        typeof usage.reasoningTokens === 'number' &&
-        usage.reasoningTokens > 0
-      ) {
-        result.reasoning = usage.reasoningTokens;
-      }
-      if (
-        typeof usage.cachedInputTokens === 'number' &&
-        usage.cachedInputTokens > 0
-      ) {
-        result.cachedInput = usage.cachedInputTokens;
-      }
-      return result;
-    }
+    res.usage ?? res.result?.usage ?? res.token_usage ?? res.meta?.usage;
+  if (!usage) return null;
+
+  const {
+    inputTokens: input,
+    outputTokens: output,
+    reasoningTokens,
+    cachedInputTokens,
+  } = usage;
+
+  if (typeof input !== 'number' || typeof output !== 'number') return null;
+
+  const result: TokenUsage = { input, output };
+
+  if (typeof reasoningTokens === 'number' && reasoningTokens > 0) {
+    result.reasoning = reasoningTokens;
   }
-  return null;
+  if (typeof cachedInputTokens === 'number' && cachedInputTokens > 0) {
+    result.cachedInput = cachedInputTokens;
+  }
+
+  return result;
 }
 
 export function calculateCost(
   tokens: TokenUsage,
   modelCost: ModelCost | undefined,
-): CostBreakdown | null {
+): TokenCost | null {
   if (!modelCost) return null;
 
-  let totalCost = 0;
-  let costWithoutCache = 0;
+  // Helper to calculate cost for a given number of tokens at a rate
+  const calcTokenCost = (tokenCount: number, rate: number): number =>
+    (tokenCount / 1_000_000) * rate;
 
-  // Calculate non-cached input tokens
-  // tokens.input includes both cached and non-cached, so subtract cached
-  const nonCachedInputTokens = tokens.cachedInput
-    ? tokens.input - tokens.cachedInput
-    : tokens.input;
+  const nonCachedInput = tokens.input - (tokens.cachedInput ?? 0);
 
-  // Non-cached input tokens at regular rate
-  const inputCost = (nonCachedInputTokens / 1_000_000) * modelCost.input;
-  totalCost += inputCost;
-  costWithoutCache += inputCost;
+  // Calculate costs for each token type
+  const inputCost = calcTokenCost(nonCachedInput, modelCost.input);
+  const outputCost = calcTokenCost(tokens.output, modelCost.output);
+  const reasoningCost = tokens.reasoning
+    ? calcTokenCost(tokens.reasoning, modelCost.output)
+    : 0;
 
-  // Regular output tokens
-  const outputCost = (tokens.output / 1_000_000) * modelCost.output;
-  totalCost += outputCost;
-  costWithoutCache += outputCost;
+  // Cost without cache: all tokens at regular rates
+  const costWithoutCache =
+    calcTokenCost(tokens.input, modelCost.input) + outputCost + reasoningCost;
 
-  // Reasoning tokens (billed as output)
-  if (tokens.reasoning) {
-    const reasoningCost = (tokens.reasoning / 1_000_000) * modelCost.output;
-    totalCost += reasoningCost;
-    costWithoutCache += reasoningCost;
-  }
+  // Cost with cache: use cache_read rate if available
+  const cachedInputCost = tokens.cachedInput
+    ? calcTokenCost(tokens.cachedInput, modelCost.cache_read ?? modelCost.input)
+    : 0;
 
-  // Cached input tokens (cheaper rate if available)
-  if (tokens.cachedInput) {
-    // With cache: use cache_read rate if available, otherwise use input rate
-    if (modelCost.cache_read) {
-      totalCost += (tokens.cachedInput / 1_000_000) * modelCost.cache_read;
-    } else {
-      totalCost += (tokens.cachedInput / 1_000_000) * modelCost.input;
-    }
-    // Without cache: those cached tokens would be billed at regular input rate
-    costWithoutCache += (tokens.cachedInput / 1_000_000) * modelCost.input;
-  }
+  const cost = inputCost + outputCost + reasoningCost + cachedInputCost;
 
-  return { cost: totalCost, costWithoutCache };
+  return { cost, costWithoutCache };
 }
 
-export function simpleUnifiedDiff(a: string, b: string): string {
-  const al = a.split('\n');
-  const bl = b.split('\n');
-  const max = Math.max(al.length, bl.length);
-  const lines: string[] = [];
-  for (let i = 0; i < max; i++) {
-    const aa = al[i];
-    const bb = bl[i];
-    if (aa === bb) lines.push(' ' + (aa ?? ''));
-    else {
-      if (aa !== undefined) lines.push('-' + aa);
-      if (bb !== undefined) lines.push('+' + bb);
+/**
+ * Create a unified diff showing only the edited regions with context.
+ * This is much more readable than a full-file line-by-line diff.
+ */
+export function createEditDiff(
+  original: string,
+  edits: Array<{
+    range: {
+      start: { line: number; character: number };
+      end: { line: number; character: number };
+    };
+    text: string;
+  }>,
+  contextLines = 3,
+): string {
+  if (edits.length === 0) return '';
+
+  const originalLines = original.split('\n');
+  const hunks: string[] = [];
+
+  // Sort edits by start position
+  const sortedEdits = [...edits].sort((a, b) => {
+    if (a.range.start.line !== b.range.start.line) {
+      return a.range.start.line - b.range.start.line;
     }
+    return a.range.start.character - b.range.start.character;
+  });
+
+  for (const edit of sortedEdits) {
+    const { start, end } = edit.range;
+    const hunkLines: string[] = [];
+
+    // Add context before
+    const contextStart = Math.max(0, start.line - contextLines);
+    for (let i = contextStart; i < start.line; i++) {
+      hunkLines.push(' ' + originalLines[i]);
+    }
+
+    // Add the old and new content
+    if (start.line === end.line) {
+      // Single line edit - show old and new versions
+      const line = originalLines[start.line] ?? '';
+      const before = line.slice(0, start.character);
+      const deleted = line.slice(start.character, end.character);
+      const after = line.slice(end.character);
+
+      // Show the old line only if something was deleted
+      if (deleted) {
+        hunkLines.push('-' + line);
+      }
+      // Show the new line
+      hunkLines.push('+' + before + edit.text + after);
+    } else {
+      // Multi-line edit
+      for (let i = start.line; i <= end.line && i < originalLines.length; i++) {
+        hunkLines.push('-' + originalLines[i]);
+      }
+
+      // Add the new content
+      const newLines = edit.text.split('\n');
+      for (const newLine of newLines) {
+        hunkLines.push('+' + newLine);
+      }
+    }
+
+    // Add context after
+    const contextEnd = Math.min(
+      originalLines.length,
+      end.line + contextLines + 1,
+    );
+    for (let i = end.line + 1; i < contextEnd; i++) {
+      hunkLines.push(' ' + originalLines[i]);
+    }
+
+    // Add hunk header
+    const hunkHeader = `@@ -${start.line + 1},${
+      end.line - start.line + 1
+    } +${start.line + 1} @@`;
+    hunks.push(hunkHeader + '\n' + hunkLines.join('\n'));
   }
-  return lines.join('\n');
+
+  return hunks.join('\n\n');
 }
 
 export function colorizeUnifiedDiff(diffText: string, noColor = false): string {
@@ -169,45 +236,640 @@ export async function rateChange(
   };
 
   try {
-    const criticProviderId = String(criticModelStr.split('/')[0]);
+    const { providerId, modelName } = parseModelString(criticModelStr);
     const criticFactory = await createProvider({
-      provider: criticProviderId,
-      log: () => {},
+      provider: providerId,
+      log: NOOP_LOG,
     });
-    const criticModelName = criticModelStr.includes('/')
-      ? criticModelStr.split('/').slice(1).join('/')
-      : '';
-    const criticModelObj = criticFactory(criticModelName);
-    const promptText =
-      CRITIC_PROMPT + '\n' + JSON.stringify(ratingPayload, null, 2);
+    const criticModelObj = criticFactory(modelName);
+    const promptText = `${CRITIC_PROMPT}\n${JSON.stringify(
+      ratingPayload,
+      null,
+      2,
+    )}`;
 
-    try {
-      const messages: ModelMessage[] = [{ role: 'user', content: promptText }];
-      const res = await generateText({
-        model: criticModelObj,
-        messages,
-      });
-      const criticRaw = (res as any)?.text ?? String(res ?? '');
-      let parsed: any = null;
-      try {
-        parsed = JSON.parse(criticRaw);
-      } catch (e) {
-        const s = criticRaw.indexOf('{');
-        const eidx = criticRaw.lastIndexOf('}');
-        if (s !== -1 && eidx !== -1) {
-          try {
-            parsed = JSON.parse(criticRaw.slice(s, eidx + 1));
-          } catch {}
+    const messages: ModelMessage[] = [{ role: 'user', content: promptText }];
+    const res = await generateText({
+      model: criticModelObj,
+      messages,
+    });
+    const criticRaw = (res as any)?.text ?? String(res ?? '');
+
+    const parsed = Parser.parseJSONObject(criticRaw);
+    return typeof parsed?.overall === 'number' ? parsed.overall : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Calculate average of a numeric array
+ */
+export function avg(arr: number[]): number {
+  return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : NaN;
+}
+
+/**
+ * Calculate percentile of a numeric array
+ */
+export function percentile(arr: number[], p: number): number {
+  if (arr.length === 0) return NaN;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.ceil((p / 100) * sorted.length) - 1;
+  return sorted[Math.max(0, idx)] ?? NaN;
+}
+
+/**
+ * Token tracker object with wrapper function and metrics getter.
+ */
+export interface TokenTracker {
+  wrapper: (params: any) => Promise<any>;
+  getMetrics: () => (TokenUsage & TokenCost) | null;
+}
+
+/**
+ * Create a token tracking wrapper that captures token usage
+ * and costs during generation
+ */
+export function createTokenTracker(
+  modelCost: ModelCost | undefined,
+): TokenTracker {
+  let capturedMetrics: (TokenUsage & TokenCost) | null = null;
+
+  return {
+    wrapper: async (params: any) => {
+      const res = await generateText(params);
+      const t = extractTokenUsage(res);
+      if (t !== null) {
+        const costBreakdown = calculateCost(t, modelCost);
+        if (costBreakdown !== null) {
+          capturedMetrics = { ...t, ...costBreakdown };
         }
       }
-      if (!parsed) return null;
-      if (typeof parsed.overall === 'number') return parsed.overall;
-      return null;
-    } catch (err) {
-      // fallthrough
+      return res;
+    },
+    getMetrics: () => capturedMetrics,
+  };
+}
+
+/**
+ * Metric definitions for inline-benchmark.ts approach comparison
+ */
+export async function runConcurrent<T>(
+  totalRuns: number,
+  concurrency: number,
+  worker: (idx: number) => Promise<T>,
+): Promise<void> {
+  let nextIdx = 0;
+
+  const workerFn = async () => {
+    while (true) {
+      const idx = nextIdx++;
+      if (idx >= totalRuns) return;
+      await worker(idx);
     }
-  } catch (err) {
-    // fallthrough
+  };
+
+  const workers: Promise<void>[] = [];
+  const usedConcurrency = Math.max(1, Math.min(concurrency, totalRuns));
+  for (let w = 0; w < usedConcurrency; w++) workers.push(workerFn());
+  await Promise.all(workers);
+}
+
+/**
+ * Common benchmark options shared across all benchmark scripts
+ */
+export interface CommonBenchmarkOptions {
+  models: string[];
+  runs: number;
+  concurrency: number;
+  preview: boolean;
+  noColor: boolean;
+  critic: boolean;
+  criticModel: string;
+  exportJson?: string;
+}
+
+/**
+ * Parse and validate approach argument from command line.
+ * If approach is 'all', returns all valid approaches. Otherwise validates
+ * against the provided list.
+ */
+export function parseApproachArg<T extends string>(
+  approach: string,
+  validApproaches: readonly T[],
+): T[] {
+  if (approach === 'all') {
+    return [...validApproaches];
   }
-  return null;
+  if (validApproaches.includes(approach as T)) {
+    return [approach as T];
+  }
+  throw new Error(
+    `Invalid approach: ${approach}. ` +
+      `Must be ${validApproaches.join(', ')}, or 'all'.`,
+  );
+}
+
+/**
+ * Parse command-line arguments common to all benchmark scripts.
+ * Returns common options and remaining unparsed arguments.
+ */
+export function parseCommonArgs(argv: string[]): {
+  common: CommonBenchmarkOptions;
+  remaining: string[];
+} {
+  const flags = new Set(['--preview', '--no-color', '--critic']);
+  const parsed = new Map<string, string | boolean>();
+  const remaining: string[] = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+
+    if (flags.has(arg)) {
+      parsed.set(arg, true);
+    } else if (arg.startsWith('--') && i + 1 < argv.length) {
+      parsed.set(arg, argv[++i]!);
+    } else {
+      remaining.push(arg);
+    }
+  }
+
+  const models = ((parsed.get('--models') as string) || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const criticModel =
+    (parsed.get('--critic-model') as string) || models[0] || '';
+
+  return {
+    common: {
+      models,
+      runs: Math.max(1, Number(parsed.get('--runs') ?? '3')),
+      concurrency: Math.max(1, Number(parsed.get('--concurrency') ?? '2')),
+      preview: Boolean(parsed.get('--preview')),
+      noColor: Boolean(parsed.get('--no-color')),
+      critic: Boolean(parsed.get('--critic')),
+      criticModel,
+      exportJson: (parsed.get('--export-json') as string) || undefined,
+    },
+    remaining,
+  };
+}
+
+/**
+ * Configuration for a metric column in a comparison table
+ */
+export interface TableMetric<T> {
+  name: string;
+  getValue: (item: T) => number | string;
+  higherIsBetter?: boolean;
+}
+
+/**
+ * Print a comparison table for benchmark results
+ */
+export function printComparisonTable<T>(
+  items: T[],
+  getLabel: (item: T) => string,
+  metrics: TableMetric<T>[],
+  options?: {
+    metricColWidth?: number;
+    valueColWidth?: number;
+  },
+): void {
+  if (items.length < 2) return;
+
+  const minMetricColWidth = options?.metricColWidth ?? 22;
+  const minValueColWidth = options?.valueColWidth ?? 18;
+
+  // Calculate dynamic column widths based on content
+  const labels = items.map(i => getLabel(i));
+  const maxLabelLength = Math.max(...labels.map(l => l.length));
+  const valueColWidth = Math.max(minValueColWidth, maxLabelLength + 2);
+
+  const maxMetricLength = Math.max(...metrics.map(m => m.name.length));
+  const metricColWidth = Math.max(minMetricColWidth, maxMetricLength + 2);
+
+  const winnerColWidth = 14;
+  const totalWidth =
+    metricColWidth + valueColWidth * items.length + winnerColWidth + 4 + 2;
+
+  // Helper to find best value index
+  const findBestIdx = (values: number[], higherIsBetter = false): number => {
+    return values.reduce((best, val, i) => {
+      const bestVal = values[best];
+      if (bestVal === undefined) return i;
+      const isBetter = higherIsBetter ? val > bestVal : val < bestVal;
+      return isBetter ? i : best;
+    }, 0);
+  };
+
+  console.log(`\n${'='.repeat(totalWidth)}`);
+  console.log('COMPARISON TABLE');
+  console.log(`${'='.repeat(totalWidth)}`);
+
+  const header =
+    'Metric'.padEnd(metricColWidth) +
+    '| ' +
+    labels.map(l => l.padEnd(valueColWidth)).join('| ') +
+    '| ' +
+    'Winner'.padEnd(winnerColWidth);
+  console.log(header);
+  console.log('-'.repeat(totalWidth));
+
+  for (const metric of metrics) {
+    const values = items.map(item => {
+      const val = metric.getValue(item);
+      const formatted =
+        typeof val === 'string'
+          ? val
+          : formatNumber(val as number, { type: 'fixed', decimals: 2 });
+      return String(formatted).padEnd(valueColWidth);
+    });
+
+    let winner = '-';
+    const numericValues = items.map(item => {
+      const val = metric.getValue(item);
+      return typeof val === 'string' ? NaN : Number(val);
+    });
+
+    if (numericValues.every(v => !Number.isNaN(v))) {
+      const bestIdx = findBestIdx(numericValues, metric.higherIsBetter);
+      winner = getLabel(items[bestIdx]!);
+    }
+
+    const row =
+      metric.name.padEnd(metricColWidth) +
+      '| ' +
+      values.join('| ') +
+      '| ' +
+      winner.padEnd(winnerColWidth);
+    console.log(row);
+  }
+
+  console.log('='.repeat(totalWidth));
+}
+
+/**
+ * Shorten a model name for display in tables
+ * Examples:
+ * - "anthropic/claude-3-5-sonnet-20241022" -> "claude-3.5-sonnet"
+ * - "openai/gpt-4o" -> "gpt-4o"
+ * - "gemini-2.0-flash" -> "gemini-2.0-flash"
+ */
+export function shortenModelName(fullName: string): string {
+  const name = fullName.split('/').at(-1) || fullName;
+  return name
+    .replace(/-20\d{6}$/g, '') // Remove date suffixes like -20241022
+    .replace(/claude-(\d+)-(\d+)/, 'claude-$1.$2'); // Simplify claude version numbers (3-5 -> 3.5)
+}
+
+export type NumberFormat =
+  | { type: 'int' }
+  | { type: 'fixed'; decimals: number }
+  | { type: 'percent'; decimals?: number }
+  | { type: 'ms' }
+  | { type: 'round' };
+
+/**
+ * Format a number with specified format type. Returns string or number
+ * depending on the format. Returns 'N/A' for NaN values.
+ */
+export function formatNumber(
+  value: number,
+  format: NumberFormat,
+): string | number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 'N/A';
+
+  switch (format.type) {
+    case 'int':
+      return Math.round(value);
+    case 'fixed':
+      return value.toFixed(format.decimals);
+    case 'percent':
+      return value.toFixed(format.decimals ?? 1) + '%';
+    case 'ms':
+      return Math.round(value) + 'ms';
+    case 'round':
+      return String(Math.round(value));
+  }
+}
+
+/**
+ * Format cost information with optional uncached cost
+ */
+export function formatCost(cost: number, uncachedCost?: number): string {
+  if (Number.isNaN(cost)) return 'N/A';
+  let result = `$${formatNumber(cost, { type: 'fixed', decimals: 6 })}`;
+  if (
+    uncachedCost !== undefined &&
+    !Number.isNaN(uncachedCost) &&
+    uncachedCost !== cost
+  ) {
+    result += ` (uncached: $${formatNumber(uncachedCost, {
+      type: 'fixed',
+      decimals: 6,
+    })})`;
+  }
+  return result;
+}
+
+/**
+ * Export benchmark results to JSON file
+ */
+export function exportBenchmarkResults(
+  exportPath: string,
+  results: Record<string, any>,
+): void {
+  fs.writeFileSync(exportPath, JSON.stringify(results, null, 2), 'utf8');
+  console.log(`\nResults exported to: ${exportPath}`);
+}
+
+/**
+ * Extract token metric arrays from run metrics.
+ * Filters metrics with valid tokenMetrics and extracts individual arrays.
+ */
+export function extractTokenMetricArrays(
+  runMetrics: Array<{ tokenMetrics?: TokenUsage & TokenCost }>,
+): {
+  tokensInput: number[];
+  tokensOutput: number[];
+  tokensReasoning: number[];
+  tokensCachedInput: number[];
+  costs: number[];
+  costsWithoutCache: number[];
+} {
+  const tokenMetrics = runMetrics
+    .filter(m => m.tokenMetrics !== undefined)
+    .map(m => m.tokenMetrics!);
+
+  return {
+    tokensInput: tokenMetrics.map(t => t.input),
+    tokensOutput: tokenMetrics.map(t => t.output),
+    tokensReasoning: tokenMetrics
+      .filter(t => t.reasoning !== undefined)
+      .map(t => t.reasoning!),
+    tokensCachedInput: tokenMetrics
+      .filter(t => t.cachedInput !== undefined)
+      .map(t => t.cachedInput!),
+    costs: tokenMetrics.map(t => t.cost),
+    costsWithoutCache: tokenMetrics.map(t => t.costWithoutCache),
+  };
+}
+
+/**
+ * Metric definitions for benchmark.ts approach comparison
+ */
+export function buildBenchmarkApproachMetrics(
+  runs: number,
+): TableMetric<any>[] {
+  return [
+    {
+      name: 'Quality Score',
+      getValue: (s: any) => s.avgScore,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Gen Latency (ms)',
+      getValue: (s: any) => s.genAvgMs,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Gen Input Tokens',
+      getValue: (s: any) => s.genAvgInputTokens,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Gen Output Tokens',
+      getValue: (s: any) => s.genAvgOutputTokens,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Gen Cost ($)',
+      getValue: (s: any) => s.genAvgCost,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Success Rate',
+      getValue: (s: any) => (s.valid / runs) * 100,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Parse Success Rate',
+      getValue: (s: any) => s.parseSuccessRate,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Avg Hints Per Run',
+      getValue: (s: any) => s.avgHintsPerRun,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Conversion Rate (%)',
+      getValue: (s: any) => s.avgConversionRate,
+      higherIsBetter: true,
+    },
+  ];
+}
+
+/**
+ * Metric definitions for benchmark.ts model comparison
+ */
+export function buildBenchmarkModelMetrics(runs: number): TableMetric<any>[] {
+  return [
+    {
+      name: 'Quality Score',
+      getValue: (item: any) => item.summary.avgScore,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Gen Latency (ms)',
+      getValue: (item: any) => item.summary.genAvgMs,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Gen Input Tokens',
+      getValue: (item: any) => item.summary.genAvgInputTokens,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Gen Output Tokens',
+      getValue: (item: any) => item.summary.genAvgOutputTokens,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Gen Cost ($)',
+      getValue: (item: any) => item.summary.genAvgCost,
+      higherIsBetter: false,
+    },
+    {
+      name: 'Success Rate',
+      getValue: (item: any) => (item.summary.valid / runs) * 100,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Parse Success Rate',
+      getValue: (item: any) => item.summary.parseSuccessRate,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Avg Hints Per Run',
+      getValue: (item: any) => item.summary.avgHintsPerRun,
+      higherIsBetter: true,
+    },
+    {
+      name: 'Conversion Rate (%)',
+      getValue: (item: any) => item.summary.avgConversionRate,
+      higherIsBetter: true,
+    },
+  ];
+}
+
+/**
+ * Metric definitions for inline-benchmark.ts approach comparison
+ */
+export function buildInlineApproachMetrics(): TableMetric<any>[] {
+  return [
+    {
+      name: 'Avg Latency (ms)',
+      getValue: (s: any) => formatNumber(s.avgLatency, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'P50 Latency (ms)',
+      getValue: (s: any) => formatNumber(s.p50Latency, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'P95 Latency (ms)',
+      getValue: (s: any) => formatNumber(s.p95Latency, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'Output Tokens',
+      getValue: (s: any) => formatNumber(s.avgOutputTokens, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'Cost ($)',
+      getValue: (s: any) =>
+        formatNumber(s.avgCost, { type: 'fixed', decimals: 6 }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'Success Rate (%)',
+      getValue: (s: any) =>
+        formatNumber(s.parseSuccessRate, {
+          type: 'fixed',
+          decimals: 1,
+        }) + '%',
+      higherIsBetter: true,
+    },
+    {
+      name: 'Avg Completions',
+      getValue: (s: any) =>
+        formatNumber(s.avgCompletions, {
+          type: 'fixed',
+          decimals: 2,
+        }),
+      higherIsBetter: true,
+    },
+    {
+      name: 'Avg Quality Score',
+      getValue: (s: any) =>
+        formatNumber(s.avgScore, {
+          type: 'fixed',
+          decimals: 1,
+        }),
+      higherIsBetter: true,
+    },
+    {
+      name: 'Max Quality Score',
+      getValue: (s: any) =>
+        formatNumber(s.maxScore, {
+          type: 'fixed',
+          decimals: 1,
+        }),
+      higherIsBetter: true,
+    },
+  ];
+}
+
+/**
+ * Metric definitions for inline-benchmark.ts model comparison
+ */
+export function buildInlineModelMetrics(): TableMetric<any>[] {
+  return [
+    {
+      name: 'Avg Latency (ms)',
+      getValue: (item: any) =>
+        formatNumber(item.summary.avgLatency, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'P50 Latency (ms)',
+      getValue: (item: any) =>
+        formatNumber(item.summary.p50Latency, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'P95 Latency (ms)',
+      getValue: (item: any) =>
+        formatNumber(item.summary.p95Latency, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'Output Tokens',
+      getValue: (item: any) =>
+        formatNumber(item.summary.avgOutputTokens, { type: 'int' }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'Cost ($)',
+      getValue: (item: any) =>
+        formatNumber(item.summary.avgCost, {
+          type: 'fixed',
+          decimals: 6,
+        }),
+      higherIsBetter: false,
+    },
+    {
+      name: 'Success Rate (%)',
+      getValue: (item: any) =>
+        formatNumber(item.summary.parseSuccessRate, {
+          type: 'fixed',
+          decimals: 1,
+        }) + '%',
+      higherIsBetter: true,
+    },
+    {
+      name: 'Avg Completions',
+      getValue: (item: any) =>
+        formatNumber(item.summary.avgCompletions, {
+          type: 'fixed',
+          decimals: 2,
+        }),
+      higherIsBetter: true,
+    },
+    {
+      name: 'Avg Quality Score',
+      getValue: (item: any) =>
+        formatNumber(item.summary.avgScore, {
+          type: 'fixed',
+          decimals: 1,
+        }),
+      higherIsBetter: true,
+    },
+    {
+      name: 'Max Quality Score',
+      getValue: (item: any) =>
+        formatNumber(item.summary.maxScore, {
+          type: 'fixed',
+          decimals: 1,
+        }),
+      higherIsBetter: true,
+    },
+  ];
 }

@@ -14,6 +14,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { type LanguageModel } from 'ai';
 import {
   createProvider,
+  parseModelString,
   ProviderInitOptions,
   type ModelSelector,
 } from './provider/provider';
@@ -98,9 +99,8 @@ async function initProvider(
   initOpts: InitOptions,
   log: Log,
 ): Promise<ProviderInitResult> {
-  const providers =
-    (initOpts.providers as Record<string, ProviderInitOptions>) || undefined;
-  const optModel = (initOpts.model as string) || undefined;
+  const providers = initOpts.providers || undefined;
+  const optModel = initOpts.model || undefined;
 
   if (optModel === undefined) {
     throw new Error(
@@ -108,23 +108,25 @@ async function initProvider(
     );
   }
 
-  const [providerId, ...parts] = optModel.split('/').filter(Boolean);
-  const modelId = parts.join('/');
-  const provider = providerId!;
+  const { providerId, modelName } = parseModelString(optModel);
 
-  log('info', `provider=${providerId}, model=${modelId}`);
+  log('info', `provider=${providerId}, model=${modelName}`);
 
-  const factory = await createProvider({ provider, log: log, providers });
+  const factory = await createProvider({
+    provider: providerId,
+    log,
+    providers,
+  });
 
   try {
     return {
       factory,
-      provider,
-      model: factory(modelId),
-      modelId,
+      provider: providerId,
+      model: factory(modelName),
+      modelId: modelName,
     };
   } catch (err) {
-    log('error', `Could not instantiate model ${modelId}: ${String(err)}`);
+    log('error', `Could not instantiate model ${modelName}: ${String(err)}`);
     throw err;
   }
 }
@@ -136,7 +138,7 @@ async function initModeConfigs(
   log: Log,
 ): Promise<void> {
   // Initialize next-edit config
-  const nextEditOpts = (initOpts.next_edit || {}) as ModeConfig;
+  const nextEditOpts = initOpts.next_edit || {};
   const nextEditModelId = nextEditOpts.model || globalModelId;
   const nextEditPrompt = nextEditOpts.prompt || 'prefix_suffix';
 
@@ -162,7 +164,7 @@ async function initModeConfigs(
   );
 
   // Initialize inline-completion config
-  const inlineCompletionOpts = (initOpts.inline_completion || {}) as ModeConfig;
+  const inlineCompletionOpts = initOpts.inline_completion || {};
   const inlineCompletionModelId = inlineCompletionOpts.model || globalModelId;
 
   INLINE_COMPLETION_CONFIG = {
@@ -175,7 +177,7 @@ async function initModeConfigs(
 
 connection.onInitialize(async (params: InitializeParams) => {
   log('info', 'LSP Server initializing...');
-  const initOpts = (params.initializationOptions || {}) as InitOptions;
+  const initOpts = params.initializationOptions || ({} as InitOptions);
 
   const result = await (async () => {
     try {
@@ -217,6 +219,7 @@ connection.onInitialized((_params: InitializedParams) => {
   connection.onDidChangeConfiguration(async change => {
     try {
       const config = (change.settings || {}) as InitOptions;
+
       const res = await initProvider(config, log);
       provider = res.factory;
       SELECTED_MODEL = res.modelId;
@@ -240,12 +243,12 @@ connection.onCompletion(
       return [];
     }
 
-    const completions = await InlineCompletion.generate(
-      INLINE_COMPLETION_CONFIG.model,
-      documents.get(pos.textDocument.uri)!,
-      pos,
+    const completions = await InlineCompletion.generate({
+      model: INLINE_COMPLETION_CONFIG.model,
+      document: documents.get(pos.textDocument.uri)!,
+      position: pos,
       log,
-    );
+    });
 
     log('info', `Completions ${JSON.stringify(completions)}`);
 

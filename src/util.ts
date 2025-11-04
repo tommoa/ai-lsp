@@ -8,6 +8,11 @@ export type Log = (
 ) => void;
 
 /**
+ * No-op logger that does nothing. Use this when logging is not needed.
+ */
+export const NOOP_LOG: Log = (_level, _message, _extra) => {};
+
+/**
  * Times a function for how long it takes.
  *
  * @param log - The logging function to use.
@@ -40,8 +45,50 @@ export function time(
 
 export namespace Parser {
   /**
+   * Attempts to extract and parse JSON from a string by finding
+   * the first and last occurrence of the given delimiters.
+   *
+   * @param raw - the raw text to search
+   * @param openDelim - opening delimiter (e.g. '{' or '[')
+   * @param closeDelim - closing delimiter (e.g. '}' or ']')
+   * @returns the parsed JSON object/array, or null if extraction/parsing fails
+   */
+  function extractJSON<T = any>(
+    raw: string,
+    openDelim: string,
+    closeDelim: string,
+  ): T | null {
+    const start = raw.indexOf(openDelim);
+    const end = raw.lastIndexOf(closeDelim);
+    if (start === -1 || end === -1) return null;
+    try {
+      return JSON.parse(raw.slice(start, end + 1)) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Parses a string returned by an LLM (that is expected to contain a valid
-   * JSON object) into a JavaScript object.
+   * JSON object) into a JavaScript object. Includes a fallback to extract
+   * the first JSON object if the entire response is not valid JSON.
+   *
+   * @param raw - the raw text returned by the LLM
+   * @returns the parsed JSON object, or null if parsing fails
+   */
+  export function parseJSONObject(raw: string): any | null {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Try to find a JSON object substring in the output. This is a
+      // best-effort recovery for model outputs that include explanatory text.
+      return extractJSON(raw, '{', '}');
+    }
+  }
+
+  /**
+   * Parses a string returned by an LLM (that is expected to contain a valid
+   * JSON array) into a JavaScript array.
    *
    * @param raw - the raw text returned by the LLM
    * @param log - the logger to print diagnostics and timing
@@ -49,30 +96,26 @@ export namespace Parser {
    * @throws when parsing fails
    */
   export function parseResponse(raw: string, log?: Log): any[] {
-    using _ = time(log!, 'info', 'parseResponse processing response', {
-      rawLength: raw.length,
-    });
-    let parsed: [];
+    using _ = log
+      ? time(log, 'info', 'parseResponse processing response', {
+          rawLength: raw.length,
+        })
+      : undefined;
     try {
-      parsed = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        throw new Error('LLM response is not an array');
+      }
+      return parsed;
     } catch (e) {
       // Try to find a JSON array substring in the output. This is a
       // best-effort recovery for model outputs that include explanatory text.
-      try {
-        const start = raw.indexOf('[');
-        const end = raw.lastIndexOf(']');
-        if (start === -1 || end === -1) throw new Error('Invalid JSON');
-        const sub = raw.slice(start, end + 1);
-        parsed = JSON.parse(sub);
-      } catch (err) {
+      const parsed = extractJSON(raw, '[', ']');
+      if (!Array.isArray(parsed)) {
         log?.('error', `parseLLMResponse JSON parse error`);
-        throw err as Error;
+        throw new Error('LLM response is not an array');
       }
+      return parsed;
     }
-    if (!Array.isArray(parsed)) {
-      const err = new Error('LLM response is not an array');
-      throw err;
-    }
-    return parsed;
   }
 }

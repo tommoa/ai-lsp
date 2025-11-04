@@ -11,6 +11,26 @@ import type { Log } from '../util';
 import { time } from '../util';
 
 /**
+ * Result of parsing a provider/model string.
+ */
+export type ParsedModel = {
+  providerId: string;
+  modelName: string;
+};
+
+/**
+ * Parse provider and model name from a string like
+ * "anthropic/claude-3-5-sonnet"
+ */
+export function parseModelString(modelStr: string): ParsedModel {
+  const parts = modelStr.split('/');
+  return {
+    providerId: parts[0] ?? '',
+    modelName: parts.slice(1).join('/'),
+  };
+}
+
+/**
  * A ModelSelector maps a logical model name to a runtime
  * `LanguageModel` instance (or provider client wrapper).
  */
@@ -301,14 +321,10 @@ export class ProviderRegistry {
   ): ModelSelector {
     using _ = log ? time(log, 'info', 'selector') : undefined;
 
-    try {
-      const args = this.buildProviderArgs(providerId, merged, override);
+    const args = this.buildProviderArgs(providerId, merged, override);
 
-      log?.('debug', `provider factory args: ${JSON.stringify(args)}`);
-      const client = factory(args);
-      return (modelName: string) => client(modelName);
-    } finally {
-    }
+    log?.('debug', `provider factory args: ${JSON.stringify(args)}`);
+    return factory(args);
   }
 
   /**
@@ -336,13 +352,12 @@ export interface ProviderOptions {
 /**
  * createProvider is a convenience wrapper around the default registry.
  */
-export async function createProvider(
-  opts: ProviderOptions,
-): Promise<ModelSelector> {
-  const provider = opts.provider;
-  const providers = opts.providers;
-  const allowInstall = opts.allowInstall;
-  const log = opts.log;
+export async function createProvider({
+  provider,
+  providers,
+  allowInstall,
+  log,
+}: ProviderOptions): Promise<ModelSelector> {
   return defaultRegistry.createSelector({
     providerId: provider,
     providers,

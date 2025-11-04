@@ -1,0 +1,72 @@
+[
+  {
+    "name": "function-call-method",
+    "language": "typescript",
+    "before": "const result = Math.fl",
+    "after": ";\nconsole.log(result);",
+    "description": "Complete method call with argument"
+  },
+  {
+    "name": "array-method",
+    "language": "javascript",
+    "before": "const numbers = [1, 2, 3];\nconst doubled = numbers.m",
+    "after": "((n) => n * 2);",
+    "description": "Complete array method name"
+  },
+  {
+    "name": "import-statement",
+    "language": "typescript",
+    "before": "import { useState ",
+    "after": " from 'react';",
+    "description": "Close import statement destructuring"
+  },
+  {
+    "name": "if-statement",
+    "language": "javascript",
+    "before": "if (user.id ===",
+    "after": ") {\n  console.log('Match');\n}",
+    "description": "Complete equality check in condition"
+  },
+  {
+    "name": "function-body",
+    "language": "typescript",
+    "before": "function greet(name: string) {\n  return ",
+    "after": ";\n}",
+    "description": "Complete function return statement with template"
+  },
+  {
+    "name": "object-property",
+    "language": "javascript",
+    "before": "const config = {\n  port: 3000,\n  host",
+    "after": ",\n  debug: true\n};",
+    "description": "Complete object property assignment"
+  },
+  {
+    "name": "try-catch",
+    "language": "typescript",
+    "before": "try {\n  const data = await fetch(url);\n} c",
+    "after": " (error) {\n  console.error(error);\n}",
+    "description": "Complete try-catch keyword"
+  },
+  {
+    "name": "variable-assignment",
+    "language": "python",
+    "before": "x = len(",
+    "after": ")",
+    "description": "Complete function argument"
+  },
+  {
+    "name": "string-method",
+    "language": "javascript",
+    "before": "const upper = 'hello'.to",
+    "after": "();",
+    "description": "Complete string method name"
+  },
+  {
+    "name": "conditional-expression",
+    "language": "javascript",
+    "before": "const status = user.active ? '",
+    "after": "' : 'inactive';",
+    "description": "Complete ternary operator"
+  }
+]

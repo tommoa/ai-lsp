@@ -8,39 +8,53 @@ import { Log, time, Parser } from './util';
 
 import INLINE_COMPLETION_PROMPT from '../prompt/inline-completion.txt';
 
+/**
+ * Validate and normalize a completion object from LLM response
+ */
+function validateCompletion(item: any): InlineCompletion.Completion | null {
+  if (!item?.text || typeof item.text !== 'string') return null;
+  return { text: item.text, reason: item.reason ?? '' };
+}
+
 export namespace InlineCompletion {
   export type Completion = { text: string; reason?: string };
 
+  /**
+   * Type for custom generate functions. Allows for injection of custom
+   * generation logic for testing or token tracking.
+   */
+  export type GenerateFn = (params: {
+    model: LanguageModel;
+    messages: ModelMessage[];
+  }) => Promise<{ text?: string }>;
+
+  /**
+   * Options for the generate function.
+   */
+  export interface GenerateOptions {
+    model: LanguageModel;
+    document: TextDocument;
+    position: TextDocumentPositionParams;
+    log?: Log;
+    generateFn?: GenerateFn;
+  }
+
   export async function generate(
-    model: LanguageModel,
-    document: TextDocument,
-    position: TextDocumentPositionParams,
-    log?: Log,
+    opts: GenerateOptions,
   ): Promise<Completion[] | null> {
-    using _ = time(log!, 'info', 'InlineCompletion.generate');
-    let docText = document.getText();
-    let textBefore: string | undefined;
-    let textAfter: string | undefined;
-    if (docText) {
-      const offset = document.offsetAt(position.position);
-      textBefore = docText.slice(0, offset);
-      textAfter = docText.slice(offset);
-    }
+    const { model, document, position, log, generateFn } = opts;
+    using _ = log ? time(log, 'info', 'InlineCompletion.generate') : undefined;
+
+    const docText = document.getText();
+    const offset = document.offsetAt(position.position);
+    const textBefore = docText.slice(0, offset);
+    const textAfter = docText.slice(offset);
 
     const messages: ModelMessage[] = [
       { role: 'system', content: INLINE_COMPLETION_PROMPT },
-      {
-        role: 'user',
-        content: `Language: ${document.languageId ?? 'text'}`,
-      },
-      {
-        role: 'user',
-        content: `Content before cursor:\n${textBefore}`,
-      },
-      {
-        role: 'user',
-        content: `Content after cursor:\n${textAfter}`,
-      },
+      { role: 'user', content: `Language: ${document.languageId ?? 'text'}` },
+      { role: 'user', content: `Content before cursor:\n${textBefore}` },
+      { role: 'user', content: `Content after cursor:\n${textAfter}` },
       {
         role: 'user',
         content: 'Provide completion suggestions for the cursor position.',
@@ -50,24 +64,21 @@ export namespace InlineCompletion {
     log?.('debug', JSON.stringify(messages));
 
     try {
-      const { text } = await generateText({
-        model,
-        messages,
-        maxOutputTokens: 1000,
-      });
+      const res = await (generateFn
+        ? generateFn({ model, messages })
+        : generateText({
+            model,
+            messages,
+            maxOutputTokens: 1000,
+          }));
+      const { text } = res as { text?: string };
 
       if (!text) return null;
 
       const parsed = Parser.parseResponse(text, log);
       const normalized: Completion[] = (parsed as any[])
-        .map((item: any) => {
-          if (!item || typeof item !== 'object') return null;
-          const t = typeof item.text === 'string' ? item.text : null;
-          const r = typeof item.reason === 'string' ? item.reason : '';
-          if (t === null) return null;
-          return { text: t, reason: r } as Completion;
-        })
-        .filter(Boolean) as Completion[];
+        .map(validateCompletion)
+        .filter((c): c is Completion => c !== null);
 
       if (normalized.length === 0) {
         log?.(
