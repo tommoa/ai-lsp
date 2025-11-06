@@ -379,7 +379,18 @@ export function parseCommonArgs(argv: string[]): {
   common: CommonBenchmarkOptions;
   remaining: string[];
 } {
-  const flags = new Set(['--preview', '--no-color', '--critic']);
+  const flags = new Set([
+    '--preview',
+    '--no-color',
+    '--critic',
+    '--export-json',
+  ]);
+  const options = new Set([
+    '--runs',
+    '--concurrency',
+    '--models',
+    '--critic-model',
+  ]);
   const parsed = new Map<string, string | boolean>();
   const remaining: string[] = [];
 
@@ -388,7 +399,7 @@ export function parseCommonArgs(argv: string[]): {
 
     if (flags.has(arg)) {
       parsed.set(arg, true);
-    } else if (arg.startsWith('--') && i + 1 < argv.length) {
+    } else if (options.has(arg) && i + 1 < argv.length) {
       parsed.set(arg, argv[++i]!);
     } else {
       remaining.push(arg);
