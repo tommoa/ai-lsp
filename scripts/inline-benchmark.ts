@@ -13,7 +13,6 @@ import type { ModelCost } from '../src/provider/module-resolver';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
 import {
   type ParseErrorType,
-  type TokenUsage,
   type TokenCost,
   type TestCase,
   type TableMetric,
@@ -22,7 +21,7 @@ import {
   classifyParseError,
   rateChange,
   percentile,
-  createTokenTracker,
+  calculateCost,
   runConcurrent,
   parseCommonArgs,
   parseApproachArg,
@@ -31,10 +30,11 @@ import {
   shortenModelName,
   extractTokenMetricArrays,
   formatNumber,
+  formatNumberString,
   buildInlineApproachMetrics,
   buildInlineModelMetrics,
 } from './benchmark-utils';
-import { NOOP_LOG } from '../src/util';
+import { NOOP_LOG, type TokenUsage } from '../src/util';
 
 type ApproachType = 'standard' | 'no_suffix' | 'high_temp' | 'low_temp';
 
@@ -153,9 +153,8 @@ async function generateCompletion(opts: {
   approach: ApproachType;
   model: LanguageModel;
   testCase: TestCase;
-  generateFn: InlineCompletion.GenerateFn;
-}): Promise<InlineCompletion.Completion[]> {
-  const { approach, model, testCase, generateFn } = opts;
+}): Promise<InlineCompletion.Result> {
+  const { approach, model, testCase } = opts;
 
   // Create a fake document with before+after content
   // The position will be at the end of "before"
@@ -180,15 +179,12 @@ async function generateCompletion(opts: {
     position: document.positionAt(offset),
   };
 
-  const completions = await InlineCompletion.generate({
+  return await InlineCompletion.generate({
     model,
     document,
     position,
     log: NOOP_LOG,
-    generateFn,
   });
-
-  return completions ?? [];
 }
 
 async function runSingleBenchmark(opts: {
@@ -216,19 +212,18 @@ async function runSingleBenchmark(opts: {
 
   console.log(`${approach} [${testCase.name}] run ${runNum}/${totalRuns}...`);
 
-  const { wrapper: generateWrapper, getMetrics } =
-    createTokenTracker(modelCost);
-
   const start = Date.now();
   let parseErrorType: ParseErrorType = 'none';
 
   try {
-    const completions = await generateCompletion({
+    const result = await generateCompletion({
       approach,
       model: languageModel,
       testCase,
-      generateFn: generateWrapper,
     });
+
+    const completions = result.completions ?? [];
+    const tokenUsage = result.tokenUsage;
 
     const latency = Date.now() - start;
     const completionCount = completions.length;
@@ -243,7 +238,9 @@ async function runSingleBenchmark(opts: {
         `completions=${completionCount}`,
     );
 
-    const metrics = getMetrics();
+    // Calculate cost from token usage
+    const cost = tokenUsage ? calculateCost(tokenUsage, modelCost) : null;
+    const metrics = tokenUsage && cost ? { ...tokenUsage, ...cost } : undefined;
     if (metrics) {
       const { input, output, cost } = metrics;
       console.log(
@@ -287,7 +284,7 @@ async function runSingleBenchmark(opts: {
 
     return {
       latency,
-      tokenMetrics: getMetrics() ?? undefined,
+      tokenMetrics: metrics,
       parseSuccess: true,
       completionCount,
       avgCompletionLength: avgLength,
@@ -431,45 +428,44 @@ function printModelComparisonTable(
 }
 
 function printSummary(summary: ApproachSummary): void {
-  const avgLatencyStr = Number.isNaN(summary.avgLatency)
-    ? 'N/A'
-    : Math.round(summary.avgLatency) + 'ms';
-  const p50LatencyStr = Number.isNaN(summary.p50Latency)
-    ? 'N/A'
-    : Math.round(summary.p50Latency) + 'ms';
-  const p95LatencyStr = Number.isNaN(summary.p95Latency)
-    ? 'N/A'
-    : Math.round(summary.p95Latency) + 'ms';
-  const avgInputTokensStr = Number.isNaN(summary.avgInputTokens)
-    ? 'N/A'
-    : Math.round(summary.avgInputTokens);
-  const avgOutputTokensStr = Number.isNaN(summary.avgOutputTokens)
-    ? 'N/A'
-    : Math.round(summary.avgOutputTokens);
+  const avgLatencyStr = formatNumberString(
+    summary.avgLatency,
+    v => Math.round(v) + 'ms',
+  );
+  const p50LatencyStr = formatNumberString(
+    summary.p50Latency,
+    v => Math.round(v) + 'ms',
+  );
+  const p95LatencyStr = formatNumberString(
+    summary.p95Latency,
+    v => Math.round(v) + 'ms',
+  );
+  const avgInputTokensStr = formatNumberString(summary.avgInputTokens, v =>
+    String(Math.round(v)),
+  );
+  const avgOutputTokensStr = formatNumberString(summary.avgOutputTokens, v =>
+    String(Math.round(v)),
+  );
   const parseSuccessRateStr = summary.parseSuccessRate.toFixed(1);
   const avgCompletionsStr = summary.avgCompletions.toFixed(2);
   const avgCompletionLengthStr = Math.round(summary.avgCompletionLength);
-  const avgScoreStr = Number.isNaN(summary.avgScore)
-    ? 'N/A'
-    : summary.avgScore.toFixed(1);
-  const maxScoreStr = Number.isNaN(summary.maxScore)
-    ? 'N/A'
-    : summary.maxScore.toFixed(1);
+  const avgScoreStr = formatNumberString(summary.avgScore, v => v.toFixed(1));
+  const maxScoreStr = formatNumberString(summary.maxScore, v => v.toFixed(1));
 
   let resultMsg =
     `\n=> ${summary.approach} avgLatency=${avgLatencyStr} ` +
     `(p50=${p50LatencyStr} p95=${p95LatencyStr}) ` +
     `genTokens=input:${avgInputTokensStr} output:${avgOutputTokensStr}`;
 
-  if (!Number.isNaN(summary.avgCost)) {
-    const costStr = summary.avgCost.toFixed(6);
-    resultMsg += ` cost=$${costStr}`;
-    if (!Number.isNaN(summary.avgCostWithoutCache)) {
-      const costWithoutCacheStr = summary.avgCostWithoutCache.toFixed(6);
-      resultMsg += ` uncached=$${costWithoutCacheStr}`;
-    }
-  } else {
-    resultMsg += ` cost=N/A`;
+  const costStr = formatNumberString(summary.avgCost, v => v.toFixed(6));
+  resultMsg += ` cost=$${costStr}`;
+
+  if (costStr !== 'N/A' && !Number.isNaN(summary.avgCostWithoutCache)) {
+    const costWithoutCacheStr = formatNumberString(
+      summary.avgCostWithoutCache,
+      v => v.toFixed(6),
+    );
+    resultMsg += ` uncached=$${costWithoutCacheStr}`;
   }
 
   resultMsg +=

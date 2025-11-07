@@ -11,7 +11,6 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { ModelCost } from '../src/provider/module-resolver';
 import {
   type ParseErrorType,
-  type TokenUsage,
   type TokenCost,
   type TableMetric,
   avg,
@@ -19,7 +18,7 @@ import {
   createEditDiff,
   colorizeUnifiedDiff,
   rateChange,
-  createTokenTracker,
+  calculateCost,
   runConcurrent,
   parseCommonArgs,
   parseApproachArg,
@@ -28,8 +27,9 @@ import {
   extractTokenMetricArrays,
   buildBenchmarkApproachMetrics,
   buildBenchmarkModelMetrics,
+  formatNumberString,
 } from './benchmark-utils';
-import { NOOP_LOG } from '../src/util';
+import { NOOP_LOG, type TokenUsage } from '../src/util';
 
 type ApproachType = 'prefix_suffix' | 'line_number';
 
@@ -204,27 +204,25 @@ async function runApproachBenchmark(opts: {
         doc,
       );
 
-      // wrapper to capture tokens for generation
-      const { wrapper: generateWrapper, getMetrics } =
-        createTokenTracker(modelCost);
-
       const start = Date.now();
       let edits: any[] = [];
       let parseSuccess = false;
       let parseErrorType: ParseErrorType = 'none';
       let hintCount = 0;
       let validHintCount = 0;
+      let tokenUsage: TokenUsage | undefined;
 
       try {
         const promptType =
           approach === 'prefix_suffix' ? 'prefix_suffix' : 'line_number';
-        edits = await NextEdit.generate({
+        const result = await NextEdit.generate({
           model: languageModel,
           document: docObj,
           prompt: promptType,
           log: NOOP_LOG,
-          generateFn: generateWrapper,
         });
+        edits = result.edits;
+        tokenUsage = result.tokenUsage;
         parseSuccess = true;
         validHintCount = edits?.length ?? 0;
         hintCount = validHintCount;
@@ -240,7 +238,7 @@ async function runApproachBenchmark(opts: {
           validHintCount: 0,
           parseErrorType,
           genLatency: 0,
-          tokenMetrics: getMetrics() ?? undefined,
+          tokenMetrics: undefined,
         });
         return;
       }
@@ -248,7 +246,10 @@ async function runApproachBenchmark(opts: {
       const genLatency = Date.now() - start;
       console.log(`${approach} generation latency=${genLatency}ms`);
 
-      const metrics = getMetrics();
+      // Calculate cost from token usage
+      const cost = tokenUsage ? calculateCost(tokenUsage, modelCost) : null;
+      const metrics =
+        tokenUsage && cost ? { ...tokenUsage, ...cost } : undefined;
       if (metrics) {
         const {
           input,
@@ -305,7 +306,7 @@ async function runApproachBenchmark(opts: {
         parseErrorType,
         genLatency,
         score,
-        tokenMetrics: getMetrics() ?? undefined,
+        tokenMetrics: metrics,
       });
     } catch (e) {
       console.error(`${approach} run failed:`, String(e));
@@ -399,18 +400,17 @@ function printModelComparisonTable(
 }
 
 function printSummary(summary: ApproachSummary, runs: number): void {
-  const avgScoreStr = Number.isNaN(summary.avgScore)
-    ? 'N/A'
-    : summary.avgScore.toFixed(3);
-  const genAvgMsStr = Number.isNaN(summary.genAvgMs)
-    ? 'N/A'
-    : Math.round(summary.genAvgMs) + 'ms';
-  const genInputTokensStr = Number.isNaN(summary.genAvgInputTokens)
-    ? 'N/A'
-    : Math.round(summary.genAvgInputTokens);
-  const genOutputTokensStr = Number.isNaN(summary.genAvgOutputTokens)
-    ? 'N/A'
-    : Math.round(summary.genAvgOutputTokens);
+  const avgScoreStr = formatNumberString(summary.avgScore, v => v.toFixed(3));
+  const genAvgMsStr = formatNumberString(
+    summary.genAvgMs,
+    v => Math.round(v) + 'ms',
+  );
+  const genInputTokensStr = formatNumberString(summary.genAvgInputTokens, v =>
+    String(Math.round(v)),
+  );
+  const genOutputTokensStr = formatNumberString(summary.genAvgOutputTokens, v =>
+    String(Math.round(v)),
+  );
   const parseSuccessRateStr = summary.parseSuccessRate.toFixed(1);
   const avgHintsStr = summary.avgHintsPerRun.toFixed(2);
   const conversionRateStr = summary.avgConversionRate.toFixed(1);
@@ -420,15 +420,15 @@ function printSummary(summary: ApproachSummary, runs: number): void {
     `(${summary.valid}/${runs} valid) genAvg=${genAvgMsStr} ` +
     `genTokens=input:${genInputTokensStr} output:${genOutputTokensStr}`;
 
-  if (!Number.isNaN(summary.genAvgCost)) {
-    const costStr = summary.genAvgCost.toFixed(6);
-    resultMsg += ` genCost=$${costStr}`;
-    if (!Number.isNaN(summary.genAvgCostWithoutCache)) {
-      const costWithoutCacheStr = summary.genAvgCostWithoutCache.toFixed(6);
-      resultMsg += ` uncached:$${costWithoutCacheStr}`;
-    }
-  } else {
-    resultMsg += ` genCost=N/A`;
+  const costStr = formatNumberString(summary.genAvgCost, v => v.toFixed(6));
+  resultMsg += ` genCost=$${costStr}`;
+
+  if (costStr !== 'N/A' && !Number.isNaN(summary.genAvgCostWithoutCache)) {
+    const costWithoutCacheStr = formatNumberString(
+      summary.genAvgCostWithoutCache,
+      v => v.toFixed(6),
+    );
+    resultMsg += ` uncached:$${costWithoutCacheStr}`;
   }
 
   resultMsg +=

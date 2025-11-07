@@ -7,7 +7,15 @@
  * strings, which may be simpler and more robust for certain codebases.
  */
 
-import { Log, time, Parser } from '../util';
+import {
+  Log,
+  time,
+  Parser,
+  type TokenUsage,
+  extractTokenUsage,
+  normalizeNewlines,
+  clip,
+} from '../util';
 import { type LanguageModel } from 'ai';
 import { generateText, type ModelMessage } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
@@ -42,21 +50,12 @@ export namespace LineNumber {
   };
 
   /**
-   * Normalize CRLF -> LF. The anchoring logic operates on a stable newline
-   * format when extracting and comparing hint substrings.
+   * Result type that includes edits and optional token usage.
    */
-  function normalizeNewlines(s: string): string {
-    return s.replace(/\r\n?/g, '\n');
-  }
-
-  /**
-   * Clip a long string for safe logging. Returns the original string when its
-   * length is <= `n`.
-   */
-  function clip(s: string, n = 200): string {
-    if (s.length <= n) return s;
-    return s.slice(0, n) + '...';
-  }
+  export type Result = {
+    edits: LspEdit[];
+    tokenUsage?: TokenUsage;
+  };
 
   /**
    * Add line number prefixes to file content.
@@ -217,14 +216,6 @@ export namespace LineNumber {
   }
 
   /**
-   * Type for generate function used to call the language model.
-   */
-  export type GenerateFn = (params: {
-    model: LanguageModel;
-    messages: ModelMessage[];
-  }) => Promise<{ text?: string } | unknown>;
-
-  /**
    * Request compact edit hints from a prepared `LanguageModel`.
    *
    * The prompt includes line-numbered file content and instructions to
@@ -233,20 +224,14 @@ export namespace LineNumber {
    * @param opts.model - prepared LanguageModel instance
    * @param opts.document - TextDocument to base hints on
    * @param opts.log - optional logger
-   * @param opts.generateFn - optional custom generate function
-   * @returns normalized `LLMHint[]`
+   * @returns object with normalized `LLMHint[]` and optional token usage
    */
   export async function requestLLMHints(opts: {
     model: LanguageModel;
     document: TextDocument;
     log?: Log;
-    generateFn?: GenerateFn;
-  }): Promise<LLMHint[]> {
-    const { model, document, log, generateFn } = opts;
-    const gen =
-      generateFn ??
-      (async (p: { model: LanguageModel; messages: ModelMessage[] }) =>
-        await generateText(p));
+  }): Promise<{ hints: LLMHint[]; tokenUsage?: TokenUsage }> {
+    const { model, document, log } = opts;
     using _timer = log
       ? time(log, 'info', 'next-edit.line-number.requestLLMHints')
       : undefined;
@@ -275,8 +260,11 @@ export namespace LineNumber {
     ];
 
     const params = { model, messages };
-    const res = await gen(params);
+    const res = await generateText(params);
     const rawOutput = (res as { text?: string }).text ?? JSON.stringify(res);
+
+    // Extract token usage from response
+    const tokenUsage = extractTokenUsage(res) ?? undefined;
 
     log?.(
       'debug',
@@ -284,7 +272,7 @@ export namespace LineNumber {
         `preview=${clip(String(rawOutput))}`,
     );
     const hints = parseLLMResponse(String(rawOutput), log);
-    return hints;
+    return { hints, tokenUsage };
   }
 
   /**
@@ -295,11 +283,14 @@ export namespace LineNumber {
     model: LanguageModel;
     document: TextDocument;
     log?: Log;
-    generateFn?: GenerateFn;
-  }): Promise<LspEdit[]> {
-    const { model, document, log, generateFn } = opts;
-    const hints = await requestLLMHints({ model, document, log, generateFn });
+  }): Promise<Result> {
+    const { model, document, log } = opts;
+    const { hints, tokenUsage } = await requestLLMHints({
+      model,
+      document,
+      log,
+    });
     const edits = convertLLMHintsToEdits({ document, hints }, log);
-    return edits;
+    return { edits, tokenUsage };
   }
 }

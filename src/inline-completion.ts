@@ -4,7 +4,7 @@ import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, type LanguageModel } from 'ai';
 import type { ModelMessage } from 'ai';
-import { Log, time, Parser } from './util';
+import { Log, time, Parser, type TokenUsage, extractTokenUsage } from './util';
 
 import INLINE_COMPLETION_PROMPT from '../prompt/inline-completion.txt';
 
@@ -20,13 +20,12 @@ export namespace InlineCompletion {
   export type Completion = { text: string; reason?: string };
 
   /**
-   * Type for custom generate functions. Allows for injection of custom
-   * generation logic for testing or token tracking.
+   * Result type that includes completions and optional token usage.
    */
-  export type GenerateFn = (params: {
-    model: LanguageModel;
-    messages: ModelMessage[];
-  }) => Promise<{ text?: string }>;
+  export type Result = {
+    completions: Completion[] | null;
+    tokenUsage?: TokenUsage;
+  };
 
   /**
    * Options for the generate function.
@@ -36,13 +35,10 @@ export namespace InlineCompletion {
     document: TextDocument;
     position: TextDocumentPositionParams;
     log?: Log;
-    generateFn?: GenerateFn;
   }
 
-  export async function generate(
-    opts: GenerateOptions,
-  ): Promise<Completion[] | null> {
-    const { model, document, position, log, generateFn } = opts;
+  export async function generate(opts: GenerateOptions): Promise<Result> {
+    const { model, document, position, log } = opts;
     using _ = log ? time(log, 'info', 'InlineCompletion.generate') : undefined;
 
     const docText = document.getText();
@@ -64,16 +60,19 @@ export namespace InlineCompletion {
     log?.('debug', JSON.stringify(messages));
 
     try {
-      const res = await (generateFn
-        ? generateFn({ model, messages })
-        : generateText({
-            model,
-            messages,
-            maxOutputTokens: 1000,
-          }));
+      const res = await generateText({
+        model,
+        messages,
+        maxOutputTokens: 1000,
+      });
       const { text } = res as { text?: string };
 
-      if (!text) return null;
+      // Extract token usage from response
+      const tokenUsage = extractTokenUsage(res) ?? undefined;
+
+      if (!text) {
+        return { completions: null, tokenUsage };
+      }
 
       const parsed = Parser.parseResponse(text, log);
       const normalized: Completion[] = (parsed as any[])
@@ -85,15 +84,15 @@ export namespace InlineCompletion {
           'warn',
           'InlineCompletion: parsed array contained no valid items',
         );
-        return null;
+        return { completions: null, tokenUsage };
       }
 
-      return normalized;
+      return { completions: normalized, tokenUsage };
     } catch (err) {
       log?.('error', 'InlineCompletion: text generation failed', {
         err: String(err),
       });
-      return null;
+      return { completions: null };
     }
   }
 }

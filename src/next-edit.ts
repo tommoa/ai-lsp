@@ -23,7 +23,7 @@
  */
 
 import { type LanguageModel } from 'ai';
-import { Log, time } from './util';
+import { Log, time, type TokenUsage } from './util';
 import { PrefixSuffix } from './next-edit/prefix-suffix';
 import { LineNumber } from './next-edit/line-number';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
@@ -43,14 +43,6 @@ export namespace NextEdit {
   export type PromptType = 'prefix_suffix' | 'line_number';
 
   /**
-   * Type for custom generate functions. Both implementations use this shape.
-   */
-  export type GenerateFn = (params: {
-    model: LanguageModel;
-    messages: ModelMessage[];
-  }) => Promise<{ text?: string } | unknown>;
-
-  /**
    * LSP-style edit. Both implementations produce this shape.
    */
   export type LspEdit = {
@@ -64,6 +56,14 @@ export namespace NextEdit {
   };
 
   /**
+   * Result type that includes edits and optional token usage.
+   */
+  export type Result = {
+    edits: LspEdit[];
+    tokenUsage?: TokenUsage;
+  };
+
+  /**
    * Unified generate function: request edit hints from a language model using
    * the specified prompt strategy and convert them to precise LSP edits.
    *
@@ -71,17 +71,15 @@ export namespace NextEdit {
    * @param opts.document - TextDocument to base hints on
    * @param opts.prompt - strategy: "prefix_suffix" (default) or "line_number"
    * @param opts.log - optional logger for diagnostics/timing
-   * @param opts.generateFn - optional custom generate function
-   * @returns array of LspEdit objects
+   * @returns object with edits and optional token usage
    */
   export async function generate(opts: {
     model: LanguageModel;
     document: TextDocument;
     prompt?: PromptType;
     log?: Log;
-    generateFn?: GenerateFn;
-  }): Promise<LspEdit[]> {
-    const { model, document, log, generateFn } = opts;
+  }): Promise<Result> {
+    const { model, document, log } = opts;
     const prompt = opts.prompt ?? 'prefix_suffix';
 
     using _timer = log
@@ -93,14 +91,12 @@ export namespace NextEdit {
         model,
         document,
         log,
-        generateFn,
       });
     } else {
       return await PrefixSuffix.generate({
         model,
         document,
         log,
-        generateFn,
       });
     }
   }

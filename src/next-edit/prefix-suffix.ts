@@ -7,7 +7,15 @@
  * describe local replacements using immediate surrounding context.
  */
 
-import { Log, time, Parser } from '../util';
+import {
+  Log,
+  time,
+  Parser,
+  type TokenUsage,
+  extractTokenUsage,
+  normalizeNewlines,
+  clip,
+} from '../util';
 import { type LanguageModel } from 'ai';
 import { generateText, type ModelMessage } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
@@ -44,12 +52,12 @@ export namespace PrefixSuffix {
   };
 
   /**
-   * Normalize CRLF -> LF. The anchoring logic operates on a stable newline
-   * format when extracting and comparing hint substrings.
+   * Result type that includes edits and optional token usage.
    */
-  function normalizeNewlines(s: string): string {
-    return s.replace(/\r\n?/g, '\n');
-  }
+  export type Result = {
+    edits: LspEdit[];
+    tokenUsage?: TokenUsage;
+  };
 
   /**
    * Find all (possibly overlapping) occurrences of `needle` in `hay`.
@@ -69,15 +77,6 @@ export namespace PrefixSuffix {
       idx = found + 1; // allow overlapping occurrences
     }
     return res;
-  }
-
-  /**
-   * Clip a long string for safe logging. Returns the original string when its
-   * length is <= `n`.
-   */
-  function clip(s: string, n = 200): string {
-    if (s.length <= n) return s;
-    return s.slice(0, n) + '...';
   }
 
   /**
@@ -264,17 +263,6 @@ export namespace PrefixSuffix {
   }
 
   /**
-   * Type for generate function used to call the language model. The function
-   * should accept an object containing the `model` and `messages` array and
-   * return a promise that resolves to an object with a `.text` property
-   * (or any other shape parseable by `parseLLMResponse`).
-   */
-  export type GenerateFn = (params: {
-    model: LanguageModel;
-    messages: ModelMessage[];
-  }) => Promise<{ text?: string } | unknown>;
-
-  /**
    * Request compact edit hints from a prepared `LanguageModel`.
    *
    * The prompt provided to the model includes a short language hint and the
@@ -284,21 +272,14 @@ export namespace PrefixSuffix {
    * @param opts.model - prepared LanguageModel instance
    * @param opts.document - TextDocument to base hints on
    * @param opts.log - optional logger
-   * @param opts.generateFn - optional custom generate function
-   * @returns normalized `LLMHint[]`
+   * @returns object with normalized `LLMHint[]` and optional token usage
    */
   export async function requestLLMHints(opts: {
     model: LanguageModel;
     document: TextDocument;
     log?: Log;
-    // optional generate function (defaults to ai.generateText)
-    generateFn?: GenerateFn;
-  }): Promise<LLMHint[]> {
-    const { model, document, log, generateFn } = opts;
-    const gen =
-      generateFn ??
-      (async (p: { model: LanguageModel; messages: ModelMessage[] }) =>
-        await generateText(p));
+  }): Promise<{ hints: LLMHint[]; tokenUsage?: TokenUsage }> {
+    const { model, document, log } = opts;
     using _timer = log
       ? time(log, 'info', 'next-edit.prefix-suffix.requestLLMHints')
       : undefined;
@@ -327,9 +308,12 @@ export namespace PrefixSuffix {
 
     const params = { model, messages };
 
-    // Call the injected generate function (defaults to ai.generateText).
-    const res = await gen(params);
+    // Call generateText to generate the response.
+    const res = await generateText(params);
     const rawOutput = (res as { text?: string }).text ?? JSON.stringify(res);
+
+    // Extract token usage from response
+    const tokenUsage = extractTokenUsage(res) ?? undefined;
 
     log?.(
       'debug',
@@ -337,7 +321,7 @@ export namespace PrefixSuffix {
         `preview=${clip(String(rawOutput))}`,
     );
     const hints = parseLLMResponse(String(rawOutput), log);
-    return hints;
+    return { hints, tokenUsage };
   }
 
   /**
@@ -348,12 +332,14 @@ export namespace PrefixSuffix {
     model: LanguageModel;
     document: TextDocument;
     log?: Log;
-    // optional generate function forwarded to requestLLMHints
-    generateFn?: GenerateFn;
-  }): Promise<LspEdit[]> {
-    const { model, document, log, generateFn } = opts;
-    const hints = await requestLLMHints({ model, document, log, generateFn });
+  }): Promise<Result> {
+    const { model, document, log } = opts;
+    const { hints, tokenUsage } = await requestLLMHints({
+      model,
+      document,
+      log,
+    });
     const edits = convertLLMHintsToEdits({ document, hints }, log);
-    return edits;
+    return { edits, tokenUsage };
   }
 }

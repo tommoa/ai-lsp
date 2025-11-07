@@ -246,13 +246,14 @@ connection.onCompletion(
     }
 
     const doc = documents.get(pos.textDocument.uri)!;
-    const completions = await InlineCompletion.generate({
+    const result = await InlineCompletion.generate({
       model: INLINE_COMPLETION_CONFIG.model,
       document: doc,
       position: pos,
       log,
     });
 
+    const completions = result.completions;
     log('info', `Completions ${JSON.stringify(completions)}`);
 
     // Extract the partial word at cursor for better filtering

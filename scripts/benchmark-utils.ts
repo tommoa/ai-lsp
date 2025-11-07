@@ -3,14 +3,12 @@ import fs from 'fs';
 import { createProvider, parseModelString } from '../src/provider/provider';
 import { generateText, type ModelMessage, type LanguageModel } from 'ai';
 import type { ModelCost } from '../src/provider/module-resolver';
-import { Parser, NOOP_LOG } from '../src/util';
-
-export type TokenUsage = {
-  input: number;
-  output: number;
-  reasoning?: number;
-  cachedInput?: number;
-};
+import {
+  Parser,
+  NOOP_LOG,
+  type TokenUsage,
+  extractTokenUsage,
+} from '../src/util';
 
 export type TokenCost = {
   cost: number;
@@ -52,34 +50,6 @@ export function classifyParseError(err: unknown): ParseErrorType {
   return 'schema_invalid';
 }
 
-export function extractTokenUsage(res: any): TokenUsage | null {
-  if (!res || typeof res !== 'object') return null;
-
-  const usage =
-    res.usage ?? res.result?.usage ?? res.token_usage ?? res.meta?.usage;
-  if (!usage) return null;
-
-  const {
-    inputTokens: input,
-    outputTokens: output,
-    reasoningTokens,
-    cachedInputTokens,
-  } = usage;
-
-  if (typeof input !== 'number' || typeof output !== 'number') return null;
-
-  const result: TokenUsage = { input, output };
-
-  if (typeof reasoningTokens === 'number' && reasoningTokens > 0) {
-    result.reasoning = reasoningTokens;
-  }
-  if (typeof cachedInputTokens === 'number' && cachedInputTokens > 0) {
-    result.cachedInput = cachedInputTokens;
-  }
-
-  return result;
-}
-
 export function calculateCost(
   tokens: TokenUsage,
   modelCost: ModelCost | undefined,
@@ -91,26 +61,30 @@ export function calculateCost(
     (tokenCount / 1_000_000) * rate;
 
   const nonCachedInput = tokens.input - (tokens.cachedInput ?? 0);
-
-  // Calculate costs for each token type
-  const inputCost = calcTokenCost(nonCachedInput, modelCost.input);
-  const outputCost = calcTokenCost(tokens.output, modelCost.output);
-  const reasoningCost = tokens.reasoning
+  const outputTokenCost = calcTokenCost(tokens.output, modelCost.output);
+  const reasoningTokenCost = tokens.reasoning
     ? calcTokenCost(tokens.reasoning, modelCost.output)
     : 0;
-
-  // Cost without cache: all tokens at regular rates
-  const costWithoutCache =
-    calcTokenCost(tokens.input, modelCost.input) + outputCost + reasoningCost;
-
-  // Cost with cache: use cache_read rate if available
-  const cachedInputCost = tokens.cachedInput
+  const cachedInputTokenCost = tokens.cachedInput
     ? calcTokenCost(tokens.cachedInput, modelCost.cache_read ?? modelCost.input)
     : 0;
 
-  const cost = inputCost + outputCost + reasoningCost + cachedInputCost;
+  const nonCachedInputTokenCost = calcTokenCost(
+    nonCachedInput,
+    modelCost.input,
+  );
 
-  return { cost, costWithoutCache };
+  return {
+    cost:
+      nonCachedInputTokenCost +
+      outputTokenCost +
+      reasoningTokenCost +
+      cachedInputTokenCost,
+    costWithoutCache:
+      calcTokenCost(tokens.input, modelCost.input) +
+      outputTokenCost +
+      reasoningTokenCost,
+  };
 }
 
 /**
@@ -280,39 +254,6 @@ export function percentile(arr: number[], p: number): number {
 }
 
 /**
- * Token tracker object with wrapper function and metrics getter.
- */
-export interface TokenTracker {
-  wrapper: (params: any) => Promise<any>;
-  getMetrics: () => (TokenUsage & TokenCost) | null;
-}
-
-/**
- * Create a token tracking wrapper that captures token usage
- * and costs during generation
- */
-export function createTokenTracker(
-  modelCost: ModelCost | undefined,
-): TokenTracker {
-  let capturedMetrics: (TokenUsage & TokenCost) | null = null;
-
-  return {
-    wrapper: async (params: any) => {
-      const res = await generateText(params);
-      const t = extractTokenUsage(res);
-      if (t !== null) {
-        const costBreakdown = calculateCost(t, modelCost);
-        if (costBreakdown !== null) {
-          capturedMetrics = { ...t, ...costBreakdown };
-        }
-      }
-      return res;
-    },
-    getMetrics: () => capturedMetrics,
-  };
-}
-
-/**
  * Metric definitions for inline-benchmark.ts approach comparison
  */
 export async function runConcurrent<T>(
@@ -469,12 +410,10 @@ export function printComparisonTable<T>(
 
   // Helper to find best value index
   const findBestIdx = (values: number[], higherIsBetter = false): number => {
-    return values.reduce((best, val, i) => {
-      const bestVal = values[best];
-      if (bestVal === undefined) return i;
-      const isBetter = higherIsBetter ? val > bestVal : val < bestVal;
-      return isBetter ? i : best;
-    }, 0);
+    if (values.length === 0) return 0;
+    const extremeFn = higherIsBetter ? Math.max : Math.min;
+    const extremeVal = extremeFn(...values);
+    return values.indexOf(extremeVal);
   };
 
   console.log(`\n${'='.repeat(totalWidth)}`);
@@ -543,6 +482,16 @@ export type NumberFormat =
   | { type: 'percent'; decimals?: number }
   | { type: 'ms' }
   | { type: 'round' };
+
+/**
+ * Format a string representation of a number, returning 'N/A' if NaN
+ */
+export function formatNumberString(
+  value: number,
+  formatter: (v: number) => string,
+): string {
+  return Number.isNaN(value) ? 'N/A' : formatter(value);
+}
 
 /**
  * Format a number with specified format type. Returns string or number

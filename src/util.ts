@@ -43,6 +43,63 @@ export function time(
   };
 }
 
+export type TokenUsage = {
+  input: number;
+  output: number;
+  reasoning?: number;
+  cachedInput?: number;
+};
+
+/**
+ * Extract token usage from AI SDK generateText response.
+ *
+ * @param res - response from generateText
+ * @returns token usage or null if not available
+ */
+/**
+ * Normalize CRLF -> LF. Used for stable newline handling across operations.
+ */
+export function normalizeNewlines(s: string): string {
+  return s.replace(/\r\n?/g, '\n');
+}
+
+/**
+ * Clip a long string for safe logging. Returns the original string when its
+ * length is <= `n`.
+ */
+export function clip(s: string, n = 200): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n) + '...';
+}
+
+export function extractTokenUsage(res: any): TokenUsage | null {
+  if (!res || typeof res !== 'object') return null;
+
+  const usage =
+    res.usage ?? res.result?.usage ?? res.token_usage ?? res.meta?.usage;
+  if (!usage) return null;
+
+  const {
+    inputTokens: input,
+    outputTokens: output,
+    reasoningTokens,
+    cachedInputTokens,
+  } = usage;
+
+  if (typeof input !== 'number' || typeof output !== 'number') return null;
+
+  const result: TokenUsage = { input, output };
+
+  if (typeof reasoningTokens === 'number' && reasoningTokens > 0) {
+    result.reasoning = reasoningTokens;
+  }
+  if (typeof cachedInputTokens === 'number' && cachedInputTokens > 0) {
+    result.cachedInput = cachedInputTokens;
+  }
+
+  return result;
+}
+
 export namespace Parser {
   /**
    * Attempts to extract and parse JSON from a string by finding
