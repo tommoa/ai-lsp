@@ -52,6 +52,8 @@ export interface ProviderInitOptions {
   headers?: Record<string, string>;
   /** Additional environment variable names to consult */
   env?: string[];
+  /** Additional args to pass through to provider factory (e.g. for mocks) */
+  [key: string]: unknown;
 }
 
 /**
@@ -151,20 +153,22 @@ export class ProviderRegistry {
   }
 
   /**
-   * Build a cache key for selector caching. The key includes
-   * provider id, npm package, environment list, and whether installs
-   * are allowed. This ensures selectors reflect their runtime
-   * configuration.
+   * Build a cache key for selector caching. The key is a JSON
+   * stringification of the entire config to ensure all options
+   * are captured, including provider-specific custom fields.
    */
   private buildCacheKey(
     providerId: string,
     config: ProviderManifest,
     allowInstall: boolean,
+    override?: ProviderInitOptions,
   ): string {
-    const envKey = config.env?.sort().join(',') ?? '';
-    const npm = config.npm ?? 'npmless';
-    const install = Boolean(allowInstall);
-    return `${providerId}:${npm}:env=${envKey}:install=${install}`;
+    return JSON.stringify({
+      providerId,
+      config,
+      allowInstall,
+      override,
+    });
   }
 
   /**
@@ -184,7 +188,12 @@ export class ProviderRegistry {
 
     const merged = this.mergeConfig(providerId, manifest, override);
 
-    const cacheKey = this.buildCacheKey(providerId, merged, allowInstall);
+    const cacheKey = this.buildCacheKey(
+      providerId,
+      merged,
+      allowInstall,
+      override,
+    );
     if (this.selectorCache.has(cacheKey)) {
       log?.('info', `Using cached provider for key ${cacheKey}`);
       return this.selectorCache.get(cacheKey)!;
@@ -276,7 +285,8 @@ export class ProviderRegistry {
   /**
    * Build the runtime args passed to a provider factory. This gathers
    * API key, base URL, selected environment variables, headers, and
-   * any provider-specific options (e.g. Vertex project/location).
+   * any provider-specific options (e.g. Vertex project/location, or
+   * mock provider configuration).
    */
   private buildProviderArgs(
     providerId: string,
@@ -299,12 +309,15 @@ export class ProviderRegistry {
 
     const vertexOptions = this.getVertexOptions(providerId, merged);
 
+    // Extract known fields and pass everything else through as-is
+    const { npm, env, ...extraOverrides } = override ?? {};
+
     return {
       apiKey,
       baseURL,
       env: envMap,
       ...vertexOptions,
-      headers: override?.headers,
+      ...extraOverrides,
     };
   }
 

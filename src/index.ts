@@ -24,14 +24,14 @@ import { NextEdit } from './next-edit';
 import { extractPartialWord } from './completion-utils';
 import { Level, Log, time } from './util';
 
-// TODO: Figure out a way to ship these aruond without needing this horrible
-// top-levl functions.
+// TODO: Figure out a way to ship these around without needing this horrible
+// top-level functions.
 // Selected provider selector (resolves model id to a concrete model
 // representation for `generateText`). Can be replaced during init.
 let provider: ModelSelector = (model: string) => model as any;
 let SELECTED_MODEL: string | undefined = undefined;
 
-// Mode-specific configuration
+// Mode-specific configuration.
 interface ModeConfig {
   model?: string;
   prompt?: 'prefix_suffix' | 'line_number';
@@ -44,6 +44,7 @@ interface InitOptions {
   inline_completion?: ModeConfig;
 }
 
+// Mode-specific runtime configuration after initialization.
 interface NextEditConfig {
   model: LanguageModel;
   modelId: string;
@@ -101,23 +102,20 @@ async function initProvider(
   initOpts: InitOptions,
   log: Log,
 ): Promise<ProviderInitResult> {
-  const providers = initOpts.providers || undefined;
-  const optModel = initOpts.model || undefined;
-
-  if (optModel === undefined) {
+  if (initOpts.model === undefined) {
     throw new Error(
       'No model defined. Please define `model` in `initializationOptions`',
     );
   }
 
-  const { providerId, modelName } = parseModelString(optModel);
+  const { providerId, modelName } = parseModelString(initOpts.model);
 
   log('info', `provider=${providerId}, model=${modelName}`);
 
   const factory = await createProvider({
     provider: providerId,
     log,
-    providers,
+    providers: initOpts.providers,
   });
 
   try {
@@ -266,10 +264,8 @@ connection.onCompletion(
       `Partial word at cursor: "${partialWord}" startChar=${startChar}`,
     );
 
-    // `completions` is now an array of { text, reason } objects. Map them to
-    // CompletionItems. Use the first line of the text as the label so items
-    // remain concise. Put the model reason into `detail` (fall back to the
-    // previous model label when reason is empty).
+    // `completions` is an array of { text, reason } objects that need to be
+    // mapped to CompletionItems.
     const items: CompletionItem[] = (completions || [])
       .map((c, index) => {
         const text = c.text ?? String(c);
@@ -323,14 +319,14 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
   return item;
 });
 
-// copilotInlineCompletion handler
+// copilotInlineEdit handler
 connection.onRequest(
-  'textDocument/copilotInlineCompletion',
+  'textDocument/copilotInlineEdit',
   async (opts: {
     textDocument: { uri: string };
     position: TextDocumentPositionParams;
   }) => {
-    using _ = time(log, 'info', 'copilotInlineCompletion');
+    using _ = time(log, 'info', 'copilotInlineEdit');
     const uri = opts?.textDocument?.uri;
     if (!uri) return { edits: [] };
 
@@ -343,15 +339,15 @@ connection.onRequest(
     }
 
     try {
-      const edits = await NextEdit.generate({
+      const result = await NextEdit.generate({
         model: NEXT_EDIT_CONFIG.model,
         document: doc,
         prompt: NEXT_EDIT_CONFIG.prompt,
         log,
       });
-      return { edits };
+      return { edits: result.edits };
     } catch (err) {
-      log('error', `copilotInlineCompletion failed: ${String(err)}`);
+      log('error', `copilotInlineEdit failed: ${String(err)}`);
       return { edits: [] };
     }
   },

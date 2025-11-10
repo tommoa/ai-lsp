@@ -1,0 +1,15 @@
+{
+  "name": "ai-lsp-mock-provider",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "description": "Mock AI provider for testing ai-lsp",
+  "type": "module",
+  "dependencies": {
+    "ai": "^5.0.89"
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "^2.0.0",
+    "@ai-sdk/provider-utils": "^3.0.0",
+    "typescript": "^5.9.3"
+  }
+}
