@@ -1,0 +1,37 @@
+[
+  {
+    "name": "simple-variable-assignment",
+    "language": "typescript",
+    "before": "const user: User = {",
+    "after": "};",
+    "description": "Complete object literal assignment"
+  },
+  {
+    "name": "function-call-completion",
+    "language": "typescript",
+    "before": "const name = getUserN",
+    "after": ";",
+    "description": "Complete function call"
+  },
+  {
+    "name": "method-chain",
+    "language": "typescript",
+    "before": "const users = service.getAllU",
+    "after": "();",
+    "description": "Complete method name"
+  },
+  {
+    "name": "array-destructuring",
+    "language": "typescript",
+    "before": "const [firstName,",
+    "after": "] = user.name.split(' ');",
+    "description": "Complete array destructuring"
+  },
+  {
+    "name": "conditional-statement",
+    "language": "typescript",
+    "before": "if (user.id ===",
+    "after": ") {\n  console.log('Match');\n}",
+    "description": "Complete equality condition"
+  }
+]

@@ -13,11 +13,14 @@
     "prepare": "husky install",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --splitting",
     "build:bundle": "bun build ./src/index.ts --outfile ./dist/cli.js --target bun --format esm",
-    "start": "bun run index.ts",
+    "start": "bun run src/index.ts",
     "test": "bun test",
     "test:unit": "bun test tests/*.test.ts",
     "test:e2e": "bun test tests/e2e/**/*.test.ts",
-    "test:e2e:watch": "bun test --watch tests/e2e"
+    "test:e2e:watch": "bun test --watch tests/e2e",
+    "test:benchmark": "bun test tests/benchmark-*.test.ts",
+    "test:benchmark:unit": "bun test tests/benchmark-utils.test.ts",
+    "test:benchmark:integration": "bun test tests/benchmark-integration.test.ts tests/analyze-ab-results.test.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

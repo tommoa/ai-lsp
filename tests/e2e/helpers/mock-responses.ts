@@ -73,6 +73,60 @@ const DEFAULT_LINE_NUMBER_EDITS: LineNumberEdit[] = [
 ];
 
 /**
+ * Benchmark-specific mock responses with deterministic data
+ */
+interface BenchmarkEdit extends BaseEdit {
+  startLine: number;
+  endLine: number;
+  startChar: number;
+  endChar: number;
+}
+
+/**
+ * Deterministic edits for benchmark testing with consistent token counts
+ */
+const BENCHMARK_PREFIX_SUFFIX_EDITS: BenchmarkEdit[] = [
+  {
+    startLine: 0,
+    endLine: 0,
+    startChar: 10,
+    endChar: 15,
+    text: '42',
+    reason: 'replace with constant',
+  },
+  {
+    startLine: 1,
+    endLine: 1,
+    startChar: 5,
+    endChar: 8,
+    text: 'getName',
+    reason: 'complete method call',
+  },
+];
+
+const BENCHMARK_LINE_NUMBER_EDITS: BenchmarkEdit[] = [
+  {
+    startLine: 2,
+    endLine: 2,
+    startChar: 0,
+    endChar: 5,
+    text: 'const result = getValue();',
+    reason: 'complete statement',
+  },
+];
+
+const BENCHMARK_INLINE_COMPLETIONS: InlineCompletion[] = [
+  {
+    text: 'User | undefined',
+    reason: 'type definition',
+  },
+  {
+    text: 'id: number;',
+    reason: 'property definition',
+  },
+];
+
+/**
  * Helper functions to generate response strings for common test cases.
  * Tests should use these to provide responses to the mock provider.
  */
@@ -91,4 +145,25 @@ export const mockResponses = {
 
   /** Custom data serialized to JSON */
   custom: (data: unknown) => JSON.stringify(data),
+
+  /** Benchmark-specific prefix/suffix edits with deterministic data */
+  benchmarkPrefixSuffix: () => JSON.stringify(BENCHMARK_PREFIX_SUFFIX_EDITS),
+
+  /** Benchmark-specific line number edits with deterministic data */
+  benchmarkLineNumber: () => JSON.stringify(BENCHMARK_LINE_NUMBER_EDITS),
+
+  /** Benchmark-specific inline completions */
+  benchmarkInline: () => JSON.stringify(BENCHMARK_INLINE_COMPLETIONS),
+
+  /** Empty response for edge case testing */
+  empty: () => JSON.stringify([]),
+
+  /** Large dataset for performance testing */
+  largeDataset: (count: number = 10) =>
+    JSON.stringify(
+      Array.from({ length: count }, (_, i) => ({
+        text: `completion_${i}`,
+        reason: `option ${i + 1}`,
+      })),
+    ),
 };
