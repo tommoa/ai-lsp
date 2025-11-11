@@ -214,7 +214,9 @@ async function runApproachBenchmark(opts: {
 
       try {
         const promptType =
-          approach === 'prefix_suffix' ? 'prefix_suffix' : 'line_number';
+          approach === 'prefix_suffix'
+            ? NextEdit.PromptType.PrefixSuffix
+            : NextEdit.PromptType.LineNumber;
         const result = await NextEdit.generate({
           model: languageModel,
           document: docObj,

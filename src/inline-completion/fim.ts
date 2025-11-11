@@ -15,12 +15,7 @@
 import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, type LanguageModel } from 'ai';
-import {
-  Log,
-  time,
-  type TokenUsage,
-  extractTokenUsage,
-} from '../util';
+import { Log, time, type TokenUsage, extractTokenUsage } from '../util';
 import {
   buildFimPrompt,
   buildFimStopSequences,

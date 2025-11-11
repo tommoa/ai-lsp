@@ -23,6 +23,8 @@ import { InlineCompletion } from './inline-completion';
 import { NextEdit } from './next-edit';
 import { extractPartialWord } from './completion-utils';
 import { Level, Log, time } from './util';
+import { isUnsupportedPromptError } from './inline-completion/errors';
+import { FimFormat } from './inline-completion/fim-formats';
 
 // TODO: Figure out a way to ship these around without needing this horrible
 // top-level functions.
@@ -32,28 +34,35 @@ let provider: ModelSelector = (model: string) => model as any;
 let SELECTED_MODEL: string | undefined = undefined;
 
 // Mode-specific configuration.
-interface ModeConfig {
+interface NextEditModeConfig {
   model?: string;
-  prompt?: 'prefix_suffix' | 'line_number';
+  prompt?: NextEdit.PromptType;
+}
+
+interface InlineCompletionModeConfig {
+  model?: string;
+  prompt?: InlineCompletion.PromptType;
 }
 
 interface InitOptions {
   providers?: Record<string, ProviderInitOptions>;
   model?: string;
-  next_edit?: ModeConfig;
-  inline_completion?: ModeConfig;
+  next_edit?: NextEditModeConfig;
+  inline_completion?: InlineCompletionModeConfig;
 }
 
 // Mode-specific runtime configuration after initialization.
 interface NextEditConfig {
   model: LanguageModel;
   modelId: string;
-  prompt: 'prefix_suffix' | 'line_number';
+  prompt: NextEdit.PromptType;
 }
 
 interface InlineCompletionConfig {
   model: LanguageModel;
   modelId: string;
+  prompt: InlineCompletion.PromptType;
+  fimFormat?: FimFormat;
 }
 
 let NEXT_EDIT_CONFIG: NextEditConfig | null = null;
@@ -140,22 +149,23 @@ async function initModeConfigs(
   // Initialize next-edit config
   const nextEditOpts = initOpts.next_edit || {};
   const nextEditModelId = nextEditOpts.model || globalModelId;
-  const nextEditPrompt = nextEditOpts.prompt || 'prefix_suffix';
+  const nextEditPrompt =
+    nextEditOpts.prompt || NextEdit.PromptType.PrefixSuffix;
 
-  if (nextEditPrompt !== 'prefix_suffix' && nextEditPrompt !== 'line_number') {
-    log('warn', `Invalid next_edit.prompt: ${nextEditPrompt}, using default`);
-    NEXT_EDIT_CONFIG = {
-      model: globalProvider(nextEditModelId),
-      modelId: nextEditModelId,
-      prompt: 'prefix_suffix',
-    };
+  // Validate next_edit.prompt
+  let validatedNextEditPrompt = NextEdit.PromptType.PrefixSuffix;
+  const nextEditPromptValues = Object.values(NextEdit.PromptType);
+  if (nextEditPromptValues.includes(nextEditPrompt as NextEdit.PromptType)) {
+    validatedNextEditPrompt = nextEditPrompt as NextEdit.PromptType;
   } else {
-    NEXT_EDIT_CONFIG = {
-      model: globalProvider(nextEditModelId),
-      modelId: nextEditModelId,
-      prompt: nextEditPrompt,
-    };
+    log('warn', `Invalid next_edit.prompt: ${nextEditPrompt}, using default`);
   }
+
+  NEXT_EDIT_CONFIG = {
+    model: globalProvider(nextEditModelId),
+    modelId: nextEditModelId,
+    prompt: validatedNextEditPrompt,
+  };
 
   log(
     'info',
@@ -166,13 +176,40 @@ async function initModeConfigs(
   // Initialize inline-completion config
   const inlineCompletionOpts = initOpts.inline_completion || {};
   const inlineCompletionModelId = inlineCompletionOpts.model || globalModelId;
+  const inlineCompletionPrompt =
+    inlineCompletionOpts.prompt || InlineCompletion.PromptType.Chat;
+
+  // Validate inline_completion.prompt
+  let validatedInlinePrompt = InlineCompletion.PromptType.Chat;
+  const inlineCompletionPromptValues = Object.values(
+    InlineCompletion.PromptType,
+  );
+  if (
+    inlineCompletionPromptValues.includes(
+      inlineCompletionPrompt as InlineCompletion.PromptType,
+    )
+  ) {
+    validatedInlinePrompt =
+      inlineCompletionPrompt as InlineCompletion.PromptType;
+  } else {
+    log(
+      'warn',
+      `Invalid inline_completion.prompt: ${inlineCompletionPrompt}, ` +
+        `using default 'chat'`,
+    );
+  }
 
   INLINE_COMPLETION_CONFIG = {
     model: globalProvider(inlineCompletionModelId),
     modelId: inlineCompletionModelId,
+    prompt: validatedInlinePrompt,
   };
 
-  log('info', `inline-completion: model=${INLINE_COMPLETION_CONFIG.modelId}`);
+  log(
+    'info',
+    `inline-completion: model=${INLINE_COMPLETION_CONFIG.modelId}, ` +
+      `prompt=${INLINE_COMPLETION_CONFIG.prompt}`,
+  );
 }
 
 connection.onInitialize(async (params: InitializeParams) => {
@@ -213,7 +250,11 @@ connection.onInitialized((_params: InitializedParams) => {
     );
   }
   if (INLINE_COMPLETION_CONFIG) {
-    log('info', `inline-completion: ${INLINE_COMPLETION_CONFIG.modelId}`);
+    log(
+      'info',
+      `inline-completion: ${INLINE_COMPLETION_CONFIG.modelId} ` +
+        `(${INLINE_COMPLETION_CONFIG.prompt})`,
+    );
   }
 
   connection.onDidChangeConfiguration(async change => {
@@ -244,12 +285,39 @@ connection.onCompletion(
     }
 
     const doc = documents.get(pos.textDocument.uri)!;
-    const result = await InlineCompletion.generate({
-      model: INLINE_COMPLETION_CONFIG.model,
-      document: doc,
-      position: pos,
-      log,
-    });
+    let result;
+    try {
+      result = await InlineCompletion.generate({
+        model: INLINE_COMPLETION_CONFIG.model,
+        document: doc,
+        position: pos,
+        log,
+        prompt: INLINE_COMPLETION_CONFIG.prompt as InlineCompletion.PromptType,
+        modelName: INLINE_COMPLETION_CONFIG.modelId,
+        fimFormat: INLINE_COMPLETION_CONFIG.fimFormat as FimFormat | undefined,
+      });
+    } catch (err) {
+      if (isUnsupportedPromptError(err)) {
+        log(
+          'warn',
+          `Unsupported prompt type: ${err.prompt} for model ${err.modelName}`,
+        );
+        log('info', `Falling back to chat completion`);
+        // Fallback to chat completion
+        result = await InlineCompletion.generate({
+          model: INLINE_COMPLETION_CONFIG.model,
+          document: doc,
+          position: pos,
+          log,
+          prompt: InlineCompletion.PromptType
+            .Chat as InlineCompletion.PromptType,
+          modelName: INLINE_COMPLETION_CONFIG.modelId,
+        });
+      } else {
+        log('error', `InlineCompletion.generate failed: ${String(err)}`);
+        throw err;
+      }
+    }
 
     const completions = result.completions;
     log('info', `Completions ${JSON.stringify(completions)}`);

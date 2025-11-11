@@ -167,7 +167,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model,
         document: doc,
-        prompt: 'prefix_suffix',
+        prompt: NextEdit.PromptType.PrefixSuffix,
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -191,7 +191,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model,
         document: doc,
-        prompt: 'prefix_suffix',
+        prompt: NextEdit.PromptType.PrefixSuffix,
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -200,7 +200,7 @@ describe('Error Classification - NextEdit', () => {
 
     expect(error).toBeDefined();
     const errorType = classifyParseError(error);
-    // Malformed JSON can be classified as either json_parse or extraction_failed
+    // Malformed JSON: json_parse or extraction_failed
     expect(['json_parse', 'extraction_failed']).toContain(errorType);
   });
 
@@ -216,7 +216,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model,
         document: doc,
-        prompt: 'prefix_suffix',
+        prompt: NextEdit.PromptType.PrefixSuffix,
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -281,7 +281,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model: malformedPrefixSuffixModel,
         document: doc,
-        prompt: 'prefix_suffix',
+        prompt: NextEdit.PromptType.PrefixSuffix,
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -509,7 +509,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
       await NextEdit.generate({
         model: errorModel,
         document: doc,
-        prompt: 'prefix_suffix',
+        prompt: NextEdit.PromptType.PrefixSuffix,
         log: NOOP_LOG,
       });
     } catch {
@@ -523,7 +523,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
     const result = await NextEdit.generate({
       model: workingModel,
       document: doc,
-      prompt: 'line_number',
+      prompt: NextEdit.PromptType.LineNumber,
       log: NOOP_LOG,
     });
 

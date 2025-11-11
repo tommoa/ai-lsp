@@ -1,5 +1,5 @@
 /**
- * Tests for inline completion prompt selection and routing logic
+ * Tests for inline completion router
  *
  * Verifies that InlineCompletion.generate() correctly routes to Chat or FIM
  * based on the 'prompt' parameter and handles errors appropriately.
@@ -12,7 +12,7 @@ import { InlineCompletion } from '../src/inline-completion';
 import { UnsupportedPromptError } from '../src/inline-completion/errors';
 import { createMockModel } from './helpers/mock-model';
 
-describe('InlineCompletion prompt routing', () => {
+describe('InlineCompletion router', () => {
   const testDoc = TextDocument.create(
     'file:///test.ts',
     'typescript',
@@ -49,7 +49,7 @@ describe('InlineCompletion prompt routing', () => {
       model,
       document: testDoc,
       position: testPosition,
-      prompt: 'chat',
+      prompt: InlineCompletion.PromptType.Chat,
     });
 
     expect(result.completions).not.toBeNull();
@@ -62,7 +62,7 @@ describe('InlineCompletion prompt routing', () => {
       model,
       document: testDoc,
       position: testPosition,
-      prompt: 'fim',
+      prompt: InlineCompletion.PromptType.FIM,
       modelName: 'deepseek-coder',
     });
 
@@ -78,7 +78,7 @@ describe('InlineCompletion prompt routing', () => {
         model,
         document: testDoc,
         position: testPosition,
-        prompt: 'fim',
+        prompt: InlineCompletion.PromptType.FIM,
         modelName: 'gpt-4',
       });
       expect.unreachable('Should have thrown UnsupportedPromptError');

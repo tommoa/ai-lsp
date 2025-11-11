@@ -4,7 +4,7 @@ import { createTestClient } from './helpers/lsp-test-client';
 import { pos, setupTestDocument } from './helpers/test-utils';
 import { mockResponses } from './helpers/mock-responses';
 
-describe('E2E: Inline Completion', () => {
+describe('E2E: Inline Completion (Chat)', () => {
   let client: LSPTestClient;
 
   beforeEach(async () => {

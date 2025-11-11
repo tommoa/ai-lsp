@@ -91,9 +91,7 @@ function createUnsupportedModel() {
     supportedUrls: {},
 
     async doGenerate() {
-      throw new Error(
-        'completion endpoint not implemented for this model',
-      );
+      throw new Error('completion endpoint not implemented for this model');
     },
 
     async doStream() {
@@ -129,8 +127,8 @@ describe('FIM.generate', () => {
       });
 
       expect(result.completions).not.toBeNull();
-      expect(result.completions![0].text).toBe(' sum');
-      expect(result.completions![0].reason).toBe('fim');
+      expect(result.completions![0]!.text).toBe(' sum');
+      expect(result.completions![0]!.reason).toBe('fim');
     });
 
     it('should include token usage in result', async () => {
@@ -164,12 +162,7 @@ describe('FIM.generate', () => {
    return a +
  }`;
 
-      const doc = TextDocument.create(
-        'file:///test.js',
-        'javascript',
-        1,
-        code,
-      );
+      const doc = TextDocument.create('file:///test.js', 'javascript', 1, code);
       const position: TextDocumentPositionParams = {
         textDocument: { uri: 'file:///test.js' },
         position: { line: 1, character: 12 }, // after 'a +'
@@ -185,7 +178,7 @@ describe('FIM.generate', () => {
       });
 
       expect(result.completions).not.toBeNull();
-      expect(result.completions![0].text).toBe(' b;');
+      expect(result.completions![0]!.text).toBe(' b;');
     });
   });
 
@@ -214,31 +207,24 @@ describe('FIM.generate', () => {
       expect(result.completions).toBeNull();
     });
 
-    it('should return null completions for whitespace-only response',
-      async () => {
-        const doc = TextDocument.create(
-          'file:///test.py',
-          'python',
-          1,
-          'x = y',
-        );
-        const position: TextDocumentPositionParams = {
-          textDocument: { uri: 'file:///test.py' },
-          position: { line: 0, character: 4 },
-        };
+    it('should return null for whitespace-only response', async () => {
+      const doc = TextDocument.create('file:///test.py', 'python', 1, 'x = y');
+      const position: TextDocumentPositionParams = {
+        textDocument: { uri: 'file:///test.py' },
+        position: { line: 0, character: 4 },
+      };
 
-        const model = createMockFimModel('   \n\t  ');
-        const result = await FIM.generate({
-          model,
-          document: doc,
-          position,
-          log: NOOP_LOG,
-          modelName: 'codellama',
-        });
+      const model = createMockFimModel('   \n\t  ');
+      const result = await FIM.generate({
+        model,
+        document: doc,
+        position,
+        log: NOOP_LOG,
+        modelName: 'codellama',
+      });
 
-        expect(result.completions).toBeNull();
-      },
-    );
+      expect(result.completions).toBeNull();
+    });
 
     it('should handle cursor at beginning of file', async () => {
       const doc = TextDocument.create(
@@ -262,7 +248,7 @@ describe('FIM.generate', () => {
       });
 
       expect(result.completions).not.toBeNull();
-      expect(result.completions?.[0].text).toBe('// comment\n');
+      expect(result.completions?.[0]!.text).toBe('// comment\n');
     });
 
     it('should handle cursor at end of file', async () => {
@@ -290,69 +276,67 @@ describe('FIM.generate', () => {
     });
   });
 
-   describe('error handling', () => {
-     it('should throw UnsupportedPromptError for various error patterns',
-       async () => {
-         const errorPatterns = [
-           {
-             name: 'generic unsupported model',
-             error: 'completion endpoint not implemented for this model',
-             modelName: 'gpt-4-turbo',
-           },
-           {
-             name: 'endpoint not found',
-             error: '404: endpoint not found',
-             modelName: 'claude-3',
-           },
-           {
-             name: 'does not support pattern',
-             error: 'Model does not support completion',
-             modelName: 'claude-opus',
-           },
-         ];
+  describe('error handling', () => {
+    it('should throw UnsupportedPromptError for errors', async () => {
+      const errorPatterns = [
+        {
+          name: 'generic unsupported model',
+          error: 'completion endpoint not implemented for this model',
+          modelName: 'gpt-4-turbo',
+        },
+        {
+          name: 'endpoint not found',
+          error: '404: endpoint not found',
+          modelName: 'claude-3',
+        },
+        {
+          name: 'does not support pattern',
+          error: 'Model does not support completion',
+          modelName: 'claude-opus',
+        },
+      ];
 
-         for (const pattern of errorPatterns) {
-           const doc = TextDocument.create(
-             'file:///test.ts',
-             'typescript',
-             1,
-             'const x = ',
-           );
-           const position: TextDocumentPositionParams = {
-             textDocument: { uri: 'file:///test.ts' },
-             position: { line: 0, character: 10 },
-           };
+      for (const pattern of errorPatterns) {
+        const doc = TextDocument.create(
+          'file:///test.ts',
+          'typescript',
+          1,
+          'const x = ',
+        );
+        const position: TextDocumentPositionParams = {
+          textDocument: { uri: 'file:///test.ts' },
+          position: { line: 0, character: 10 },
+        };
 
-           const badModel = {
-             specificationVersion: 'v2' as const,
-             provider: 'mock',
-             modelId: 'test',
-             supportedUrls: {},
-             async doGenerate() {
-               throw new Error(pattern.error);
-             },
-             async doStream() {
-               throw new Error(pattern.error);
-             },
-           } as any;
+        const badModel = {
+          specificationVersion: 'v2' as const,
+          provider: 'mock',
+          modelId: 'test',
+          supportedUrls: {},
+          async doGenerate() {
+            throw new Error(pattern.error);
+          },
+          async doStream() {
+            throw new Error(pattern.error);
+          },
+        } as any;
 
-           try {
-             await FIM.generate({
-               model: badModel,
-               document: doc,
-               position,
-               modelName: pattern.modelName,
-             });
-             expect.unreachable(
-               `Should have thrown UnsupportedPromptError for: ${pattern.name}`,
-             );
-           } catch (err) {
-             expect(err).toBeInstanceOf(UnsupportedPromptError);
-             const typedErr = err as UnsupportedPromptError;
-             expect(typedErr.prompt).toBe('fim');
-           }
-         }
-       },
-     );
-   });
+        try {
+          await FIM.generate({
+            model: badModel,
+            document: doc,
+            position,
+            modelName: pattern.modelName,
+          });
+          expect.unreachable(
+            `Should have thrown UnsupportedPromptError for: ${pattern.name}`,
+          );
+        } catch (err) {
+          expect(err).toBeInstanceOf(UnsupportedPromptError);
+          const typedErr = err as UnsupportedPromptError;
+          expect(typedErr.prompt).toBe('fim');
+        }
+      }
+    });
+  });
 });

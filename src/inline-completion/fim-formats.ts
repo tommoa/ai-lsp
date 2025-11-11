@@ -9,9 +9,14 @@
  */
 
 /**
- * FIM token format identifier
+ * Enum for FIM format types
  */
-export type FimFormat = 'openai' | 'codellama' | 'qwen' | 'starcoder';
+export enum FimFormat {
+  OpenAI = 'openai',
+  CodeLlama = 'codellama',
+  Qwen = 'qwen',
+  StarCoder = 'starcoder',
+}
 
 /**
  * Token markers for a specific FIM format
@@ -66,12 +71,12 @@ export const FIM_FORMATS: Record<FimFormat, FimTokens> = {
 export function detectFimFormat(modelName: string): FimFormat {
   const lower = modelName.toLowerCase();
 
-  if (lower.includes('codellama')) return 'codellama';
-  if (lower.includes('qwen')) return 'qwen';
-  if (lower.includes('starcoder')) return 'starcoder';
+  if (lower.includes('codellama')) return FimFormat.CodeLlama;
+  if (lower.includes('qwen')) return FimFormat.Qwen;
+  if (lower.includes('starcoder')) return FimFormat.StarCoder;
 
   // Default to openai format (used by DeepSeek, most others)
-  return 'openai';
+  return FimFormat.OpenAI;
 }
 
 /**
@@ -89,7 +94,7 @@ export function detectFimFormat(modelName: string): FimFormat {
 export function buildFimPrompt(
   prefix: string,
   suffix: string,
-  format: FimFormat = 'openai',
+  format: FimFormat = FimFormat.OpenAI,
 ): string {
   const tokens = FIM_FORMATS[format];
   return `${tokens.prefix}${prefix}${tokens.suffix}${suffix}${tokens.middle}`;
@@ -109,7 +114,7 @@ export function buildFimPrompt(
  * @returns Array of stop sequences
  */
 export function buildFimStopSequences(
-  format: FimFormat = 'openai',
+  format: FimFormat = FimFormat.OpenAI,
   suffixHint?: string,
 ): string[] {
   const tokens = FIM_FORMATS[format];

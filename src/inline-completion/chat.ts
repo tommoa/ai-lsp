@@ -10,13 +10,7 @@ import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, type LanguageModel } from 'ai';
 import type { ModelMessage } from 'ai';
-import {
-  Log,
-  time,
-  Parser,
-  type TokenUsage,
-  extractTokenUsage,
-} from '../util';
+import { Log, time, Parser, type TokenUsage, extractTokenUsage } from '../util';
 
 import INLINE_COMPLETION_PROMPT from '../../prompt/inline-completion.txt';
 
@@ -71,7 +65,8 @@ export namespace Chat {
     const textBefore = docText.slice(0, offset);
     const textAfter = docText.slice(offset);
 
-    // Construct messages with full context: language, before, after, and instruction
+    // Construct messages with full context:
+    // language, before, after, and instruction
     const messages: ModelMessage[] = [
       { role: 'system', content: INLINE_COMPLETION_PROMPT },
       { role: 'user', content: `Language: ${document.languageId ?? 'text'}` },

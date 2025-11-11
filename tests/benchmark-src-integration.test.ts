@@ -102,12 +102,7 @@ function createTestDocument(
   content: string,
   languageId: string = 'typescript',
 ): TextDocument {
-  return TextDocument.create(
-    'file:///test/file.ts',
-    languageId,
-    1,
-    content,
-  );
+  return TextDocument.create('file:///test/file.ts', languageId, 1, content);
 }
 
 describe('NextEdit Integration - Benchmark Compatibility', () => {
@@ -133,7 +128,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
@@ -171,7 +166,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'line_number',
+      prompt: NextEdit.PromptType.LineNumber,
       log: NOOP_LOG,
     });
 
@@ -204,7 +199,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
@@ -224,7 +219,8 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
   });
 
   /**
-   * PROTECTS AGAINST: Changes to edit structure that would break createEditDiff()
+   * PROTECTS AGAINST: Changes to edit structure that would break
+   * createEditDiff()
    */
   it('should produce edits compatible with createEditDiff()', async () => {
     const prefixSuffixResponse = JSON.stringify([
@@ -243,7 +239,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
@@ -270,7 +266,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
       await NextEdit.generate({
         model,
         document: doc,
-        prompt: 'prefix_suffix',
+        prompt: NextEdit.PromptType.PrefixSuffix,
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -297,7 +293,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
@@ -334,7 +330,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
@@ -363,7 +359,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
     expect(result.edits).toBeArray();
@@ -508,7 +504,7 @@ describe('Benchmark Utility Functions Integration', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
@@ -554,7 +550,7 @@ describe('Benchmark Utility Functions Integration', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: 'prefix_suffix',
+      prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
@@ -573,7 +569,8 @@ describe('Benchmark Script Smoke Tests', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    tempDir = `/tmp/benchmark-smoke-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const randomId = Math.random().toString(36).substring(7);
+    tempDir = `/tmp/benchmark-smoke-${Date.now()}-${randomId}`;
     try {
       fs.mkdirSync(tempDir, { recursive: true });
     } catch {
@@ -620,15 +617,15 @@ describe('Benchmark Script Smoke Tests', () => {
       let stdout = '';
       let stderr = '';
 
-      proc.stdout?.on('data', (data) => {
+      proc.stdout?.on('data', data => {
         stdout += data.toString();
       });
 
-      proc.stderr?.on('data', (data) => {
+      proc.stderr?.on('data', data => {
         stderr += data.toString();
       });
 
-      proc.on('close', (code) => {
+      proc.on('close', code => {
         if (code === 0) {
           // Verify some expected output
           expect(stdout).toContain('prefix_suffix');
@@ -642,7 +639,7 @@ describe('Benchmark Script Smoke Tests', () => {
         }
       });
 
-      proc.on('error', (err) => {
+      proc.on('error', err => {
         reject(err);
       });
 
@@ -682,15 +679,15 @@ describe('Benchmark Script Smoke Tests', () => {
       let stdout = '';
       let stderr = '';
 
-      proc.stdout?.on('data', (data) => {
+      proc.stdout?.on('data', data => {
         stdout += data.toString();
       });
 
-      proc.stderr?.on('data', (data) => {
+      proc.stderr?.on('data', data => {
         stderr += data.toString();
       });
 
-      proc.on('close', (code) => {
+      proc.on('close', code => {
         if (code === 0) {
           expect(stdout).toContain('standard');
           resolve();
@@ -703,7 +700,7 @@ describe('Benchmark Script Smoke Tests', () => {
         }
       });
 
-      proc.on('error', (err) => {
+      proc.on('error', err => {
         reject(err);
       });
 

@@ -36,7 +36,12 @@ import {
 } from './benchmark-utils';
 import { NOOP_LOG, type TokenUsage } from '../src/util';
 
-type ApproachType = 'standard' | 'no_suffix' | 'high_temp' | 'low_temp';
+type ApproachType =
+  | 'standard'
+  | 'no_suffix'
+  | 'high_temp'
+  | 'low_temp'
+  | 'fim';
 
 interface BenchmarkOptions {
   testCases: string;
@@ -55,7 +60,7 @@ function usage(): void {
   console.log(
     'Usage: bun run scripts/inline-benchmark.ts ' +
       '--test-cases <path> --models <m1,m2> ' +
-      '[--approach standard|no_suffix|high_temp|low_temp|all] ' +
+      '[--approach standard|no_suffix|high_temp|low_temp|fim|all] ' +
       '[--runs N] [--concurrency N] [--preview] [--no-color] ' +
       '[--critic] [--critic-model <provider/model>] [--export-json <path>]',
   );
@@ -93,6 +98,7 @@ function parseArgs(): BenchmarkOptions {
       'no_suffix',
       'high_temp',
       'low_temp',
+      'fim',
     ] as const;
     approaches = parseApproachArg(approach, validApproaches) as ApproachType[];
   } catch (err) {
@@ -153,8 +159,9 @@ async function generateCompletion(opts: {
   approach: ApproachType;
   model: LanguageModel;
   testCase: TestCase;
+  modelName: string;
 }): Promise<InlineCompletion.Result> {
-  const { approach, model, testCase } = opts;
+  const { approach, model, testCase, modelName } = opts;
 
   // Create a fake document with before+after content
   // The position will be at the end of "before"
@@ -179,11 +186,19 @@ async function generateCompletion(opts: {
     position: document.positionAt(offset),
   };
 
+  // Use FIM for 'fim' approach, otherwise use chat (default)
+  const promptType =
+    approach === 'fim'
+      ? InlineCompletion.PromptType.FIM
+      : InlineCompletion.PromptType.Chat;
+
   return await InlineCompletion.generate({
     model,
     document,
     position,
     log: NOOP_LOG,
+    prompt: promptType,
+    modelName: approach === 'fim' ? modelName : undefined,
   });
 }
 
@@ -197,6 +212,7 @@ async function runSingleBenchmark(opts: {
   preview: boolean;
   critic: boolean;
   criticModel: string;
+  modelName: string;
 }): Promise<RunMetrics> {
   const {
     approach,
@@ -208,6 +224,7 @@ async function runSingleBenchmark(opts: {
     preview,
     critic,
     criticModel,
+    modelName,
   } = opts;
 
   console.log(`${approach} [${testCase.name}] run ${runNum}/${totalRuns}...`);
@@ -220,6 +237,7 @@ async function runSingleBenchmark(opts: {
       approach,
       model: languageModel,
       testCase,
+      modelName,
     });
 
     const completions = result.completions ?? [];
@@ -360,6 +378,7 @@ async function runApproachBenchmark(opts: {
         preview,
         critic,
         criticModel,
+        modelName,
       });
       runMetrics.push(metrics);
     } catch (e) {

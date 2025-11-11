@@ -31,16 +31,12 @@ import type { ModelMessage } from 'ai';
 
 export namespace NextEdit {
   /**
-   * Prompt type: which strategy to use for sending file content to the LLM.
-   *
-   * - "prefix_suffix": Sends compact hints requesting { prefix, existing,
-   *   suffix, text, reason }. Suitable for models that work well with
-   *   localized context.
-   * - "line_number": Sends full file with line numbers (L1:, L2:, ...).
-   *   Requests { startLine, endLine, text, reason }. Suitable for models
-   *   that benefit from full context.
+   * Enum for next-edit prompt types
    */
-  export type PromptType = 'prefix_suffix' | 'line_number';
+  export enum PromptType {
+    PrefixSuffix = 'prefix_suffix',
+    LineNumber = 'line_number',
+  }
 
   /**
    * LSP-style edit. Both implementations produce this shape.

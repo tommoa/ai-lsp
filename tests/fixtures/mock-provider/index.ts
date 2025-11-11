@@ -17,10 +17,11 @@ interface ProviderArgs {
    */
   response: string;
   /**
-   * If true, throws an error from doGenerate/doStream.
+   * If true or a string, throws an error from doGenerate/doStream.
+   * If string, uses the string as the error message.
    * Useful for testing error handling.
    */
-  throwError?: boolean;
+  throwError?: boolean | string;
 }
 
 /**
@@ -49,6 +50,8 @@ export default function createMockProvider(
 ): (modelId: string) => LanguageModelV2 {
   const responseText = args.response;
   const shouldThrow = args.throwError ?? false;
+  const errorMessage =
+    typeof shouldThrow === 'string' ? shouldThrow : 'Mock provider error';
 
   return function selectModel(modelId: string): LanguageModelV2 {
     return {
@@ -59,7 +62,7 @@ export default function createMockProvider(
 
       async doGenerate(_options: LanguageModelV2CallOptions) {
         if (shouldThrow) {
-          throw new Error('Mock provider error');
+          throw new Error(errorMessage);
         }
         return {
           content: [
@@ -76,7 +79,7 @@ export default function createMockProvider(
 
       async doStream(_options: LanguageModelV2CallOptions) {
         if (shouldThrow) {
-          throw new Error('Mock provider error');
+          throw new Error(errorMessage);
         }
 
         const stream = new ReadableStream<LanguageModelV2StreamPart>({

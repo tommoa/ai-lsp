@@ -255,7 +255,12 @@ describe('Benchmark Utilities - Diff & Display', () => {
           },
         },
         {
-          tokenMetrics: { input: 200, output: 60, cost: 0.002, costWithoutCache: 0.002 },
+          tokenMetrics: {
+            input: 200,
+            output: 60,
+            cost: 0.002,
+            costWithoutCache: 0.002,
+          },
         },
       ];
       const result = extractTokenMetricArrays(runMetrics as any);
