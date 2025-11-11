@@ -18,3 +18,5 @@
 
 - **Agent checks:** run `bun tsc --noEmit`, `bun run lint` and `bun run index.ts` to validate changes
 - **Cursor/Copilot:** follow any `.cursor` rules and `.github/copilot-instructions.md` if present
+
+- **Commits:** follow the style guide in `COMMIT-GUIDELINES.md`
