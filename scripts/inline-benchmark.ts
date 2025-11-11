@@ -35,13 +35,10 @@ import {
   buildInlineModelMetrics,
 } from './benchmark-utils';
 import { NOOP_LOG, type TokenUsage } from '../src/util';
+import { isUnsupportedPromptError } from '../src/inline-completion/errors';
 
-type ApproachType =
-  | 'standard'
-  | 'no_suffix'
-  | 'high_temp'
-  | 'low_temp'
-  | 'fim';
+// ApproachType is derived from InlineCompletion.PromptType
+type ApproachType = 'chat' | 'fim';
 
 interface BenchmarkOptions {
   testCases: string;
@@ -60,7 +57,7 @@ function usage(): void {
   console.log(
     'Usage: bun run scripts/inline-benchmark.ts ' +
       '--test-cases <path> --models <m1,m2> ' +
-      '[--approach standard|no_suffix|high_temp|low_temp|fim|all] ' +
+      '[--approach chat|fim|all] ' +
       '[--runs N] [--concurrency N] [--preview] [--no-color] ' +
       '[--critic] [--critic-model <provider/model>] [--export-json <path>]',
   );
@@ -76,7 +73,7 @@ function parseArgs(): BenchmarkOptions {
   }
 
   let testCases: string | undefined;
-  let approach = 'standard';
+  let approach = 'all';
 
   for (let i = 0; i < remaining.length; i++) {
     const arg = remaining[i]!;
@@ -93,13 +90,7 @@ function parseArgs(): BenchmarkOptions {
 
   let approaches: ApproachType[] = [];
   try {
-    const validApproaches = [
-      'standard',
-      'no_suffix',
-      'high_temp',
-      'low_temp',
-      'fim',
-    ] as const;
+    const validApproaches = ['chat', 'fim'] as const;
     approaches = parseApproachArg(approach, validApproaches) as ApproachType[];
   } catch (err) {
     console.error(String(err));
@@ -129,6 +120,7 @@ interface RunMetrics {
   scores?: number[];
   maxScore?: number;
   parseErrorType: ParseErrorType;
+  skipped?: boolean;
 }
 
 interface ApproachSummary {
@@ -146,6 +138,7 @@ interface ApproachSummary {
   avgScore: number;
   maxScore: number;
   valid: number;
+  skipped?: boolean;
 }
 
 interface TestCaseResults {
@@ -165,12 +158,7 @@ async function generateCompletion(opts: {
 
   // Create a fake document with before+after content
   // The position will be at the end of "before"
-  let fullContent = testCase.before + testCase.after;
-
-  // For no_suffix approach, we only use the before part
-  if (approach === 'no_suffix') {
-    fullContent = testCase.before;
-  }
+  const fullContent = testCase.before + testCase.after;
 
   const document = TextDocument.create(
     `test://${testCase.name}`,
@@ -186,7 +174,7 @@ async function generateCompletion(opts: {
     position: document.positionAt(offset),
   };
 
-  // Use FIM for 'fim' approach, otherwise use chat (default)
+  // Map approach directly to PromptType (same string values)
   const promptType =
     approach === 'fim'
       ? InlineCompletion.PromptType.FIM
@@ -311,6 +299,22 @@ async function runSingleBenchmark(opts: {
       parseErrorType,
     };
   } catch (e) {
+    // Skip if approach is not supported
+    if (isUnsupportedPromptError(e)) {
+      console.log(
+        `${approach} [${testCase.name}] SKIPPED: ` +
+          `Approach '${approach}' not supported by this model`,
+      );
+      return {
+        latency: 0,
+        parseSuccess: false,
+        completionCount: 0,
+        avgCompletionLength: 0,
+        parseErrorType: 'none',
+        skipped: true,
+      };
+    }
+
     parseErrorType = classifyParseError(e);
     console.error(
       `${approach} [${testCase.name}] generation failed ` +
@@ -393,13 +397,37 @@ function computeSummary(
   runMetrics: RunMetrics[],
   approach: ApproachType,
 ): ApproachSummary {
-  const latencies = runMetrics.map(m => m.latency);
+  // Filter out skipped runs
+  const validMetrics = runMetrics.filter(m => !m.skipped);
+
+  // If all runs were skipped, return a summary indicating that
+  if (validMetrics.length === 0) {
+    return {
+      approach,
+      avgLatency: 0,
+      p50Latency: 0,
+      p95Latency: 0,
+      avgInputTokens: 0,
+      avgOutputTokens: 0,
+      avgCost: 0,
+      avgCostWithoutCache: 0,
+      parseSuccessRate: 0,
+      avgCompletions: 0,
+      avgCompletionLength: 0,
+      avgScore: 0,
+      maxScore: NaN,
+      valid: 0,
+      skipped: true,
+    };
+  }
+
+  const latencies = validMetrics.map(m => m.latency);
   const { tokensInput, tokensOutput, costs, costsWithoutCache } =
-    extractTokenMetricArrays(runMetrics);
-  const parseSuccesses = runMetrics.filter(m => m.parseSuccess);
-  const completionCounts = runMetrics.map(m => m.completionCount);
-  const completionLengths = runMetrics.map(m => m.avgCompletionLength);
-  const maxScores = runMetrics
+    extractTokenMetricArrays(validMetrics);
+  const parseSuccesses = validMetrics.filter(m => m.parseSuccess);
+  const completionCounts = validMetrics.map(m => m.completionCount);
+  const completionLengths = validMetrics.map(m => m.avgCompletionLength);
+  const maxScores = validMetrics
     .filter(m => m.maxScore !== undefined)
     .map(m => m.maxScore!);
 
@@ -412,7 +440,7 @@ function computeSummary(
     avgOutputTokens: avg(tokensOutput),
     avgCost: avg(costs),
     avgCostWithoutCache: avg(costsWithoutCache),
-    parseSuccessRate: (parseSuccesses.length / runMetrics.length) * 100,
+    parseSuccessRate: (parseSuccesses.length / validMetrics.length) * 100,
     avgCompletions: avg(completionCounts),
     avgCompletionLength: avg(completionLengths),
     avgScore: avg(maxScores),
@@ -447,6 +475,15 @@ function printModelComparisonTable(
 }
 
 function printSummary(summary: ApproachSummary): void {
+  // Handle skipped approach
+  if (summary.skipped) {
+    console.log(
+      `\n=> ${summary.approach} SKIPPED ` +
+        `(approach not supported by this model)`,
+    );
+    return;
+  }
+
   const avgLatencyStr = formatNumberString(
     summary.avgLatency,
     v => Math.round(v) + 'ms',

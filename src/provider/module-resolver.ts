@@ -82,6 +82,42 @@ export type ProviderFactory = (
 ) => (modelName: string) => LanguageModel;
 
 /**
+ * Local provider defaults for common providers not in models.dev.
+ * These are merged with models.dev data (models.dev takes precedence).
+ */
+const LOCAL_PROVIDER_DEFAULTS: Record<string, ProviderManifest> = {
+  ollama: {
+    id: 'ollama',
+    env: ['OLLAMA_API_KEY'],
+    npm: '@ai-sdk/openai-compatible',
+    api: 'http://localhost:11434/v1',
+    name: 'Ollama',
+    models: {
+      codegemma: {
+        id: 'codegemma',
+        name: 'CodeGemma',
+        cost: { input: 0, output: 0 },
+      },
+      codellama: {
+        id: 'codellama',
+        name: 'CodeLlama',
+        cost: { input: 0, output: 0 },
+      },
+      'deepseek-coder': {
+        id: 'deepseek-coder',
+        name: 'DeepSeek Coder',
+        cost: { input: 0, output: 0 },
+      },
+      'qwen2.5-coder': {
+        id: 'qwen2.5-coder',
+        name: 'Qwen 2.5 Coder',
+        cost: { input: 0, output: 0 },
+      },
+    },
+  },
+};
+
+/**
  * A cached copy of the models.dev index. It is tri-state:
  * - `undefined`   => not yet fetched
  * - `null`        => fetch attempted but unavailable (error)
@@ -134,9 +170,17 @@ export class ModuleResolver {
     log?: Log,
   ): Promise<ProviderManifest | undefined> {
     const index = await fetchModelsDevIndex(log);
-    if (!index) return undefined;
-    if (!(providerId in index)) return undefined;
-    return index[providerId] as ProviderManifest;
+
+    // Merge local defaults with models.dev (models.dev takes precedence)
+    const manifest = {
+      ...LOCAL_PROVIDER_DEFAULTS[providerId],
+      ...(index?.[providerId] as ProviderManifest | undefined),
+    };
+
+    // Return undefined if we have neither source
+    if (!manifest.id) return undefined;
+
+    return manifest as ProviderManifest;
   }
 
   /**

@@ -49,6 +49,62 @@ The `inline_completion` mode generates completions at the cursor position. Curre
 
 - **`model`** (optional): Override the global model for this mode
 
+### Using Local Providers
+
+ai-lsp supports local model providers like **Ollama** and **LM Studio** out of the box.
+
+#### Ollama
+
+1. Start Ollama:
+
+   ```bash
+   ollama serve
+   ```
+
+2. Pull a code model:
+
+   ```bash
+   ollama pull codegemma
+   ```
+
+3. Configure in your LSP client (example: `examples/ollama-init.lua`):
+   ```lua
+   init_options = {
+     providers = {
+       ollama = {
+         -- Optional: override default endpoint
+         baseURL = "http://localhost:11434/v1",
+       },
+     },
+     model = "ollama/codegemma",
+     inline_completion = {
+       prompt = "fim",  -- Use FIM for efficient code completion
+     },
+   }
+   ```
+
+**Supported Ollama models for code:**
+
+- `codegemma` - Google's CodeGemma (recommended)
+- `codellama` - Meta's Code Llama
+- `deepseek-coder` - DeepSeek Coder
+- `qwen2.5-coder` - Qwen 2.5 Coder
+
+#### LM Studio
+
+LM Studio works the same way:
+
+```lua
+init_options = {
+  providers = {
+    lmstudio = {
+      baseURL = "http://localhost:1234/v1",  -- LM Studio default port
+    },
+  },
+  model = "lmstudio/your-model-name",
+}
+```
+
 ## Missing features
 
 - Figure out why `copilot-language-server` requires `textDocument/didFocus`
@@ -120,6 +176,36 @@ bun run scripts/benchmark.ts --file test.ts --models openai/gpt-4 \
 - `--critic` - enable critic scoring for quality assessment
 - `--critic-model <model>` - model to use for critic (default: first model)
 - `--export-json <path>` - export results to JSON file
+
+### Benchmarking Local Models
+
+Local models work with the same benchmark commands:
+
+```bash
+# Benchmark Ollama with FIM
+bun run scripts/inline-benchmark.ts \
+  --test-cases tests/fixtures/inline-completion-cases.json \
+  --models ollama/codegemma \
+  --approach fim \
+  --runs 5
+
+# Compare local vs cloud
+bun run scripts/inline-benchmark.ts \
+  --test-cases tests/fixtures/inline-completion-cases.json \
+  --models ollama/codegemma,google/gemini-flash-latest \
+  --approach fim,chat \
+  --runs 5
+
+# Benchmark next-edit with Ollama
+bun run scripts/benchmark.ts \
+  --file tests/fixtures/small/simple-refactor.ts \
+  --models ollama/codegemma \
+  --runs 3
+```
+
+**Note:** Provider configuration (baseURL, apiKey) currently only works through LSP
+`initializationOptions`. CLI flags for provider config will be added in a future
+update.
 
 ### Post-Analysis
 
