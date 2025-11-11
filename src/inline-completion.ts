@@ -1,23 +1,25 @@
-// TODO: Document this a little better and add some (maybe configurable)
-// guard-rails.
-import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
-import { TextDocument } from 'vscode-languageserver-textdocument';
-import { generateText, type LanguageModel } from 'ai';
-import type { ModelMessage } from 'ai';
-import { Log, time, Parser, type TokenUsage, extractTokenUsage } from './util';
-
-import INLINE_COMPLETION_PROMPT from '../prompt/inline-completion.txt';
-
 /**
- * Validate and normalize a completion object from LLM response
+ * Inline completion: generate code completions at cursor position.
+ *
+ * Supports multiple prompt strategies for different use cases.
+ * Each implementation produces the same output shape.
+ *
+ * Public API
+ * - generate({model,document,position,log}): unified entry point
+ * - Chat: direct access to chat implementation
  */
-function validateCompletion(item: any): InlineCompletion.Completion | null {
-  if (!item?.text || typeof item.text !== 'string') return null;
-  return { text: item.text, reason: item.reason ?? '' };
-}
+
+import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
+import { type TextDocument } from 'vscode-languageserver-textdocument';
+import { type LanguageModel } from 'ai';
+import { Log, time, type TokenUsage } from './util';
+import { Chat } from './inline-completion/chat';
 
 export namespace InlineCompletion {
-  export type Completion = { text: string; reason?: string };
+  export type Completion = {
+    text: string;
+    reason?: string;
+  };
 
   /**
    * Result type that includes completions and optional token usage.
@@ -37,62 +39,28 @@ export namespace InlineCompletion {
     log?: Log;
   }
 
+  /**
+   * Unified generate function: request completions from a language model
+   * at the cursor position.
+   *
+   * @param opts.model - prepared LanguageModel instance
+   * @param opts.document - TextDocument to get completions for
+   * @param opts.position - cursor position for completion
+   * @param opts.log - optional logger for diagnostics/timing
+   * @returns object with completions and optional token usage
+   */
   export async function generate(opts: GenerateOptions): Promise<Result> {
     const { model, document, position, log } = opts;
-    using _ = log ? time(log, 'info', 'InlineCompletion.generate') : undefined;
 
-    const docText = document.getText();
-    const offset = document.offsetAt(position.position);
-    const textBefore = docText.slice(0, offset);
-    const textAfter = docText.slice(offset);
+    using _timer = log
+      ? time(log, 'info', 'InlineCompletion.generate')
+      : undefined;
 
-    const messages: ModelMessage[] = [
-      { role: 'system', content: INLINE_COMPLETION_PROMPT },
-      { role: 'user', content: `Language: ${document.languageId ?? 'text'}` },
-      { role: 'user', content: `Content before cursor:\n${textBefore}` },
-      { role: 'user', content: `Content after cursor:\n${textAfter}` },
-      {
-        role: 'user',
-        content: 'Provide completion suggestions for the cursor position.',
-      },
-    ];
-
-    log?.('debug', JSON.stringify(messages));
-
-    try {
-      const res = await generateText({
-        model,
-        messages,
-        maxOutputTokens: 1000,
-      });
-      const { text } = res as { text?: string };
-
-      // Extract token usage from response
-      const tokenUsage = extractTokenUsage(res) ?? undefined;
-
-      if (!text) {
-        return { completions: null, tokenUsage };
-      }
-
-      const parsed = Parser.parseResponse(text, log);
-      const normalized: Completion[] = (parsed as any[])
-        .map(validateCompletion)
-        .filter((c): c is Completion => c !== null);
-
-      if (normalized.length === 0) {
-        log?.(
-          'warn',
-          'InlineCompletion: parsed array contained no valid items',
-        );
-        return { completions: null, tokenUsage };
-      }
-
-      return { completions: normalized, tokenUsage };
-    } catch (err) {
-      log?.('error', 'InlineCompletion: text generation failed', {
-        err: String(err),
-      });
-      return { completions: null };
-    }
+    return await Chat.generate({
+      model,
+      document,
+      position,
+      log,
+    });
   }
 }
