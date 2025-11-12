@@ -1,133 +1,147 @@
 /**
- * FIM (Fill-in-the-Middle) token formats for different model families.
+ * FIM (Fill-in-the-Middle) template system for different model families.
  *
  * Different models use different special tokens to delimit the prefix,
  * suffix, and middle (gap to fill) sections. This module provides:
- * - Token format definitions for common model families
- * - Auto-detection of format from model name
- * - Helpers to build FIM prompts and stop sequences
+ * - Template definitions for common model families
+ * - Template builder with ${placeholder} syntax
+ * - Helpers to build FIM prompts
  */
 
 /**
- * Enum for FIM format types
+ * FIM template with ${placeholder} syntax for content injection
  */
-export enum FimFormat {
-  OpenAI = 'openai',
-  CodeLlama = 'codellama',
-  Qwen = 'qwen',
-  StarCoder = 'starcoder',
+export interface FimTemplate {
+  /** Template string using ${placeholder} syntax for context variables */
+  template: string;
+
+  /** Stop sequences to halt generation */
+  stop: string[];
+
+  /** Optional: default values for placeholders */
+  defaults?: Record<string, string>;
+
+  /** Optional: human-readable name for debugging */
+  name?: string;
 }
 
 /**
- * Token markers for a specific FIM format
+ * Context variables for FIM prompt generation.
+ *
+ * Core fields are prefix and suffix. Additional fields can be provided
+ * for templates that use extended context (e.g., Qwen uses repo_name
+ * and file_path).
  */
-export interface FimTokens {
+export interface FimContext {
+  /** Text before cursor position (required) */
   prefix: string;
+
+  /** Text after cursor position (required) */
   suffix: string;
-  middle: string;
+
+  /** Repository name (optional, used by some templates like Qwen) */
+  repo_name?: string;
+
+  /** File path (optional, used by some templates like Qwen) */
+  file_path?: string;
 }
 
 /**
- * Token definitions for each FIM format.
- * Models are typically trained with one of these token schemes.
+ * Built-in FIM templates for common model families.
+ * Each template can be selected by ID or auto-detected from model name.
  */
-export const FIM_FORMATS: Record<FimFormat, FimTokens> = {
-  // OpenAI/DeepSeek/most models use this format
+export const BUILTIN_FIM_TEMPLATES: Record<string, FimTemplate> = {
   openai: {
-    prefix: '<fim_prefix>',
-    suffix: '<fim_suffix>',
-    middle: '<fim_middle>',
+    name: 'OpenAI Format',
+    template: '<fim_prefix>${prefix}<fim_suffix>${suffix}<fim_middle>',
+    stop: ['<fim_suffix>', '<fim_prefix>', '\n\n'],
   },
 
-  // CodeLlama models use this format
   codellama: {
-    prefix: '<PRE>',
-    suffix: '<SUF>',
-    middle: '<MID>',
+    name: 'CodeLlama Format',
+    template: '▁<PRE>${prefix}▁<SUF>${suffix}▁<MID>',
+    stop: ['▁<SUF>', '▁<PRE>', '▁<EOT>', '\n\n'],
   },
 
-  // Qwen models use this format
+  deepseek: {
+    name: 'DeepSeek Coder Format',
+    template: '<｜fim▁begin｜>${prefix}<｜fim▁hole｜>${suffix}<｜fim▁end｜>',
+    stop: ['<｜fim▁end｜>', '\n\n'],
+  },
+
   qwen: {
-    prefix: '<|fim_prefix|>',
-    suffix: '<|fim_suffix|>',
-    middle: '<|fim_middle|>',
-  },
-
-  // StarCoder models use same as openai
-  starcoder: {
-    prefix: '<fim_prefix>',
-    suffix: '<fim_suffix>',
-    middle: '<fim_middle>',
+    name: 'Qwen Coder Format',
+    template:
+      '<|repo_name|>${repo_name}<|file_path|>${file_path}<|fim_prefix|>' +
+      '${prefix}<|fim_suffix|>${suffix}<|fim_middle|>',
+    stop: ['<|fim_suffix>', '<|fim_prefix>', '<|endoftext|>'],
+    defaults: {
+      repo_name: 'unknown',
+      file_path: '',
+    },
   },
 };
 
 /**
- * Detect FIM format from model name using heuristic-based detection.
- * Falls back to 'openai' format (most common) if no match found.
+ * Get a built-in FIM template by ID with type safety.
  *
- * @param modelName - Model name to detect format for
- * @returns Detected FIM format
+ * @param templateId - The template ID to retrieve
+ * @returns The FIM template, or undefined if not found
  */
-export function detectFimFormat(modelName: string): FimFormat {
-  const lower = modelName.toLowerCase();
-
-  if (lower.includes('codellama')) return FimFormat.CodeLlama;
-  if (lower.includes('qwen')) return FimFormat.Qwen;
-  if (lower.includes('starcoder')) return FimFormat.StarCoder;
-
-  // Default to openai format (used by DeepSeek, most others)
-  return FimFormat.OpenAI;
+export function getBuiltinTemplate(
+  templateId: string,
+): FimTemplate | undefined {
+  return BUILTIN_FIM_TEMPLATES[templateId];
 }
 
 /**
- * Build a FIM prompt from prefix and suffix text.
+ * Auto-detect FIM template from model name.
  *
- * The prompt combines prefix, suffix, and middle tokens in the format
- * expected by the model, creating a fill-in-the-middle prompt where
- * the model generates the middle section.
+ * Uses heuristic matching on the model name to select an appropriate
+ * FIM template. Falls back to OpenAI format if no match is found.
  *
- * @param prefix - Text before the gap
- * @param suffix - Text after the gap
- * @param format - FIM token format to use (default: openai)
- * @returns Complete FIM prompt string
+ * @param modelName - Model name to detect template for
+ * @returns The detected FIM template
  */
-export function buildFimPrompt(
-  prefix: string,
-  suffix: string,
-  format: FimFormat = FimFormat.OpenAI,
-): string {
-  const tokens = FIM_FORMATS[format];
-  return `${tokens.prefix}${prefix}${tokens.suffix}${suffix}${tokens.middle}`;
-}
+export function autoDetectFimTemplate(modelName: string): FimTemplate {
+  const modelLower = modelName.toLowerCase();
 
-/**
- * Build stop sequences for FIM completion.
- *
- * Stop sequences tell the model when to stop generating. For FIM, we use:
- * - The suffix token (model shouldn't generate into the suffix)
- * - The prefix token (safety measure)
- * - Double newline (natural code boundary)
- * - Optionally, a hint from the actual suffix (prevents generating past it)
- *
- * @param format - FIM token format (default: openai)
- * @param suffixHint - First few chars of actual suffix for smart stopping
- * @returns Array of stop sequences
- */
-export function buildFimStopSequences(
-  format: FimFormat = FimFormat.OpenAI,
-  suffixHint?: string,
-): string[] {
-  const tokens = FIM_FORMATS[format];
-  const stop = [tokens.suffix, tokens.prefix, '\n\n'];
+  // Model name patterns checked in order, first match wins
+  const patterns = ['codellama', 'deepseek', 'qwen'];
 
-  // Add suffix hint as stop sequence if provided
-  // This helps the model avoid generating past the natural code boundary
-  if (suffixHint && suffixHint.trim().length > 0) {
-    const hint = suffixHint.trim().slice(0, 20);
-    if (hint.length > 3) {
-      stop.push(hint);
+  for (const pattern of patterns) {
+    if (modelLower.includes(pattern)) {
+      return BUILTIN_FIM_TEMPLATES[pattern]!;
     }
   }
 
-  return stop;
+  // Default to OpenAI format (most common)
+  return BUILTIN_FIM_TEMPLATES['openai']!;
+}
+
+/**
+ * Build a FIM prompt from a template and context.
+ *
+ * Replaces ${placeholder} with values from context, falling back to
+ * template defaults if a value is not provided.
+ *
+ * @param template - FIM template with placeholders
+ * @param context - Context variables to inject
+ * @returns Complete FIM prompt string
+ */
+export function buildFimPrompt(
+  template: FimTemplate,
+  context: FimContext,
+): string {
+  // Merge context with defaults (context takes precedence)
+  const fullContext: Record<string, string | undefined> = {
+    ...template.defaults,
+    ...context,
+  };
+
+  // Replace ${placeholder} with values from context
+  return template.template.replace(
+    /\$\{(\w+)\}/g,
+    (_, key: string) => fullContext[key] ?? '',
+  );
 }

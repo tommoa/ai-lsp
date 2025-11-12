@@ -13,7 +13,12 @@ import { describe, it, expect } from 'bun:test';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { FIM } from '../src/inline-completion/fim';
+import { InlineCompletion } from '../src/inline-completion';
 import { UnsupportedPromptError } from '../src/inline-completion/errors';
+import {
+  BUILTIN_FIM_TEMPLATES,
+  type FimTemplate,
+} from '../src/inline-completion/fim-formats';
 import { NOOP_LOG } from '../src/util';
 
 /**
@@ -80,28 +85,6 @@ function createMockFimModel(completionText: string) {
   return mockModel;
 }
 
-/**
- * Create a mock model that throws an unsupported error
- */
-function createUnsupportedModel() {
-  const mockModel = {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'unsupported-model',
-    supportedUrls: {},
-
-    async doGenerate() {
-      throw new Error('completion endpoint not implemented for this model');
-    },
-
-    async doStream() {
-      throw new Error('Streaming not supported');
-    },
-  } as any;
-
-  return mockModel;
-}
-
 describe('FIM.generate', () => {
   describe('basic completion generation', () => {
     it('should generate completion from prefix and suffix', async () => {
@@ -122,7 +105,7 @@ describe('FIM.generate', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        modelName: 'deepseek-coder',
+        fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
         maxTokens: 256,
       });
 
@@ -149,7 +132,7 @@ describe('FIM.generate', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        modelName: 'codellama-34b',
+        fimFormat: BUILTIN_FIM_TEMPLATES['codellama']!,
       });
 
       expect(result.tokenUsage).toBeDefined();
@@ -159,8 +142,8 @@ describe('FIM.generate', () => {
 
     it('should handle multiline prefix and suffix', async () => {
       const code = `function add(a, b) {
-   return a +
- }`;
+    return a +
+  }`;
 
       const doc = TextDocument.create('file:///test.js', 'javascript', 1, code);
       const position: TextDocumentPositionParams = {
@@ -174,7 +157,7 @@ describe('FIM.generate', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        modelName: 'qwen-coder',
+        fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
       });
 
       expect(result.completions).not.toBeNull();
@@ -201,7 +184,7 @@ describe('FIM.generate', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        modelName: 'starcoder',
+        fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
       });
 
       expect(result.completions).toBeNull();
@@ -220,7 +203,7 @@ describe('FIM.generate', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        modelName: 'codellama',
+        fimFormat: BUILTIN_FIM_TEMPLATES['codellama']!,
       });
 
       expect(result.completions).toBeNull();
@@ -244,7 +227,7 @@ describe('FIM.generate', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        modelName: 'deepseek-coder',
+        fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
       });
 
       expect(result.completions).not.toBeNull();
@@ -269,7 +252,7 @@ describe('FIM.generate', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        modelName: 'qwen-coder',
+        fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
       });
 
       expect(result.completions).toBeNull();
@@ -277,65 +260,173 @@ describe('FIM.generate', () => {
   });
 
   describe('error handling', () => {
-    it('should throw UnsupportedPromptError for errors', async () => {
-      const errorPatterns = [
-        {
-          name: 'generic unsupported model',
-          error: 'completion endpoint not implemented for this model',
-          modelName: 'gpt-4-turbo',
-        },
-        {
-          name: 'endpoint not found',
-          error: '404: endpoint not found',
-          modelName: 'claude-3',
-        },
-        {
-          name: 'does not support pattern',
-          error: 'Model does not support completion',
-          modelName: 'claude-opus',
-        },
-      ];
+    it('should throw UnsupportedPromptError on unsupported model', async () => {
+      const doc = TextDocument.create(
+        'file:///test.ts',
+        'typescript',
+        1,
+        'const x = ',
+      );
+      const position: TextDocumentPositionParams = {
+        textDocument: { uri: 'file:///test.ts' },
+        position: { line: 0, character: 10 },
+      };
 
-      for (const pattern of errorPatterns) {
-        const doc = TextDocument.create(
-          'file:///test.ts',
-          'typescript',
-          1,
-          'const x = ',
-        );
-        const position: TextDocumentPositionParams = {
-          textDocument: { uri: 'file:///test.ts' },
-          position: { line: 0, character: 10 },
-        };
+      const badModel = {
+        specificationVersion: 'v2' as const,
+        provider: 'mock',
+        modelId: 'test',
+        supportedUrls: {},
+        async doGenerate() {
+          throw new Error('completion endpoint not implemented for this model');
+        },
+        async doStream() {
+          throw new Error('completion endpoint not implemented for this model');
+        },
+      } as any;
 
-        const badModel = {
-          specificationVersion: 'v2' as const,
-          provider: 'mock',
-          modelId: 'test',
-          supportedUrls: {},
-          async doGenerate() {
-            throw new Error(pattern.error);
-          },
-          async doStream() {
-            throw new Error(pattern.error);
-          },
-        } as any;
+      try {
+        await FIM.generate({
+          model: badModel,
+          document: doc,
+          position,
+          fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+        });
+        expect.unreachable('Should have thrown UnsupportedPromptError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnsupportedPromptError);
+        const typedErr = err as UnsupportedPromptError;
+        expect(typedErr.prompt).toBe('fim');
+      }
+    });
+  });
 
-        try {
-          await FIM.generate({
-            model: badModel,
-            document: doc,
-            position,
-            modelName: pattern.modelName,
-          });
-          expect.unreachable(
-            `Should have thrown UnsupportedPromptError for: ${pattern.name}`,
-          );
-        } catch (err) {
-          expect(err).toBeInstanceOf(UnsupportedPromptError);
-          const typedErr = err as UnsupportedPromptError;
-          expect(typedErr.prompt).toBe('fim');
-        }
+  describe('custom FIM templates', () => {
+    it('should work with custom template definition', async () => {
+      const doc = TextDocument.create(
+        'file:///test.rs',
+        'rust',
+        1,
+        'fn main() { println!() }',
+      );
+      const position: TextDocumentPositionParams = {
+        textDocument: { uri: 'file:///test.rs' },
+        position: { line: 0, character: 20 }, // inside println!()
+      };
+
+      const customTemplate: FimTemplate = {
+        name: 'Custom Rust Format',
+        template: '[PREFIX]${prefix}[SUFFIX]${suffix}[INFILL]',
+        stop: ['[SUFFIX]', '[PREFIX]', '\n\n'],
+      };
+
+      const model = createMockFimModel('"Hello, world!"');
+      const result = await FIM.generate({
+        model,
+        document: doc,
+        position,
+        log: NOOP_LOG,
+        fimFormat: customTemplate,
+      });
+
+      expect(result.completions).not.toBeNull();
+      expect(result.completions![0]!.text).toBe('"Hello, world!"');
+    });
+
+    it('should use custom template defaults', async () => {
+      const doc = TextDocument.create('file:///test.py', 'python', 1, 'x = ');
+      const position: TextDocumentPositionParams = {
+        textDocument: { uri: 'file:///test.py' },
+        position: { line: 0, character: 4 },
+      };
+
+      const customTemplate: FimTemplate = {
+        name: 'Template With Metadata',
+        template: '<lang:${language}>${prefix}<|FILL|>${suffix}',
+        stop: ['<|FILL|>'],
+        defaults: {
+          language: 'python',
+        },
+      };
+
+      const model = createMockFimModel('42');
+      const result = await FIM.generate({
+        model,
+        document: doc,
+        position,
+        log: NOOP_LOG,
+        fimFormat: customTemplate,
+      });
+
+      expect(result.completions).not.toBeNull();
+      expect(result.completions![0]!.text).toBe('42');
+    });
+  });
+
+  describe('InlineCompletion routing to FIM', () => {
+    it('should route to FIM when prompt="fim"', async () => {
+      const doc = TextDocument.create(
+        'file:///test.ts',
+        'typescript',
+        1,
+        'const x = hello',
+      );
+      const position: TextDocumentPositionParams = {
+        textDocument: { uri: 'file:///test.ts' },
+        position: { line: 0, character: 10 },
+      };
+
+      const model = createMockFimModel(' fim_completion');
+      const result = await InlineCompletion.generate({
+        model,
+        document: doc,
+        position,
+        prompt: InlineCompletion.PromptType.FIM,
+        fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
+      });
+
+      expect(result.completions).not.toBeNull();
+      expect(result.completions?.[0]?.text).toBe(' fim_completion');
+    });
+
+    it('should throw UnsupportedPromptError when FIM unsupported', async () => {
+      const doc = TextDocument.create(
+        'file:///test.ts',
+        'typescript',
+        1,
+        'const x = hello',
+      );
+      const position: TextDocumentPositionParams = {
+        textDocument: { uri: 'file:///test.ts' },
+        position: { line: 0, character: 10 },
+      };
+
+      const badModel = {
+        specificationVersion: 'v2' as const,
+        provider: 'mock',
+        modelId: 'test',
+        supportedUrls: {},
+        async doGenerate() {
+          throw new Error('completion endpoint not implemented');
+        },
+        async doStream() {
+          throw new Error('completion endpoint not implemented');
+        },
+      } as any;
+
+      try {
+        await InlineCompletion.generate({
+          model: badModel,
+          document: doc,
+          position,
+          prompt: InlineCompletion.PromptType.FIM,
+          fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+        });
+        expect.unreachable('Should have thrown UnsupportedPromptError');
+      } catch (err) {
+        expect(err).toBeInstanceOf(UnsupportedPromptError);
+        const typedErr = err as UnsupportedPromptError;
+        expect(typedErr.prompt).toBe('fim');
       }
     });
   });

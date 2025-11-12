@@ -7,6 +7,10 @@ import {
   getModelCostInfo,
   parseModelString,
 } from '../src/provider/provider';
+import {
+  BUILTIN_FIM_TEMPLATES,
+  autoDetectFimTemplate,
+} from '../src/inline-completion/fim-formats';
 import type { LanguageModel } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { ModelCost } from '../src/provider/module-resolver';
@@ -180,14 +184,18 @@ async function generateCompletion(opts: {
       ? InlineCompletion.PromptType.FIM
       : InlineCompletion.PromptType.Chat;
 
-  return await InlineCompletion.generate({
+  const generateOpts: InlineCompletion.GenerateOptions = {
     model,
     document,
     position,
     log: NOOP_LOG,
     prompt: promptType,
-    modelName: approach === 'fim' ? modelName : undefined,
-  });
+    ...(approach === 'fim' && {
+      fimFormat: autoDetectFimTemplate(modelName),
+    }),
+  };
+
+  return await InlineCompletion.generate(generateOpts);
 }
 
 async function runSingleBenchmark(opts: {

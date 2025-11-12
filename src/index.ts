@@ -24,7 +24,31 @@ import { NextEdit } from './next-edit';
 import { extractPartialWord } from './completion-utils';
 import { Level, Log, time } from './util';
 import { isUnsupportedPromptError } from './inline-completion/errors';
-import { FimFormat } from './inline-completion/fim-formats';
+import {
+  autoDetectFimTemplate,
+  getBuiltinTemplate,
+  type FimTemplate,
+} from './inline-completion/fim-formats';
+
+/**
+ * Resolve FIM template from configuration.
+ *
+ * @param configFormat - Template from config (string ID, object, or undefined)
+ * @param modelId - Model ID for auto-detection fallback
+ * @returns Resolved FIM template
+ */
+function resolveFimTemplate(
+  configFormat: string | FimTemplate | undefined,
+  modelId: string,
+): FimTemplate {
+  if (typeof configFormat === 'object') {
+    return configFormat;
+  }
+  if (typeof configFormat === 'string') {
+    return getBuiltinTemplate(configFormat) ?? getBuiltinTemplate('openai')!;
+  }
+  return autoDetectFimTemplate(modelId);
+}
 
 // TODO: Figure out a way to ship these around without needing this horrible
 // top-level functions.
@@ -42,6 +66,7 @@ interface NextEditModeConfig {
 interface InlineCompletionModeConfig {
   model?: string;
   prompt?: InlineCompletion.PromptType;
+  fimFormat?: string | FimTemplate;
 }
 
 interface InitOptions {
@@ -62,7 +87,7 @@ interface InlineCompletionConfig {
   model: LanguageModel;
   modelId: string;
   prompt: InlineCompletion.PromptType;
-  fimFormat?: FimFormat;
+  fimFormat?: FimTemplate;
 }
 
 let NEXT_EDIT_CONFIG: NextEditConfig | null = null;
@@ -199,10 +224,21 @@ async function initModeConfigs(
     );
   }
 
+  // Resolve FIM template (only if prompt is 'fim')
+  let fimFormat: FimTemplate | undefined;
+  if (validatedInlinePrompt === InlineCompletion.PromptType.FIM) {
+    fimFormat = resolveFimTemplate(
+      inlineCompletionOpts.fimFormat,
+      inlineCompletionModelId,
+    );
+    log('info', `FIM template: ${fimFormat.name || 'custom'}`);
+  }
+
   INLINE_COMPLETION_CONFIG = {
     model: globalProvider(inlineCompletionModelId),
     modelId: inlineCompletionModelId,
     prompt: validatedInlinePrompt,
+    fimFormat,
   };
 
   log(
@@ -293,8 +329,7 @@ connection.onCompletion(
         position: pos,
         log,
         prompt: INLINE_COMPLETION_CONFIG.prompt as InlineCompletion.PromptType,
-        modelName: INLINE_COMPLETION_CONFIG.modelId,
-        fimFormat: INLINE_COMPLETION_CONFIG.fimFormat as FimFormat | undefined,
+        fimFormat: INLINE_COMPLETION_CONFIG.fimFormat,
       });
     } catch (err) {
       if (isUnsupportedPromptError(err)) {
@@ -311,7 +346,6 @@ connection.onCompletion(
           log,
           prompt: InlineCompletion.PromptType
             .Chat as InlineCompletion.PromptType,
-          modelName: INLINE_COMPLETION_CONFIG.modelId,
         });
       } else {
         log('error', `InlineCompletion.generate failed: ${String(err)}`);

@@ -15,11 +15,8 @@ import { type LanguageModel } from 'ai';
 import { Log, time, type TokenUsage } from './util';
 import { Chat } from './inline-completion/chat';
 import { FIM } from './inline-completion/fim';
-import {
-  UnsupportedPromptError,
-  isUnsupportedPromptError,
-} from './inline-completion/errors';
-import { FimFormat } from './inline-completion/fim-formats';
+import { isUnsupportedPromptError } from './inline-completion/errors';
+import { type FimTemplate } from './inline-completion/fim-formats';
 
 export namespace InlineCompletion {
   /**
@@ -57,14 +54,9 @@ export namespace InlineCompletion {
      */
     prompt?: PromptType;
     /**
-     * Model name for FIM format auto-detection.
-     * Required when prompt='fim' for automatic format detection.
+     * FIM template for prompt construction. Only used when prompt='fim'.
      */
-    modelName?: string;
-    /**
-     * Explicit FIM format (optional). If specified, skips auto-detection.
-     */
-    fimFormat?: FimFormat;
+    fimFormat?: FimTemplate;
     /**
      * Maximum tokens to generate (default: 256 for FIM, 1000 for chat).
      */
@@ -82,10 +74,12 @@ export namespace InlineCompletion {
    * @param opts.document - TextDocument to get completions for
    * @param opts.position - cursor position for completion
    * @param opts.log - optional logger for diagnostics/timing
-   * @param opts.prompt - completion strategy ('chat' or 'fim', default: 'chat')
-   * @param opts.modelName - model name for FIM format detection
-   * @param opts.fimFormat - explicit FIM format (skips auto-detection)
-   * @param opts.maxTokens - max tokens to generate (default based on prompt)
+   * @param opts.prompt - completion strategy ('chat' or 'fim', default:
+   *                      'chat')
+   * @param opts.fimFormat - FIM template for prompt construction (required
+   *                         if prompt='fim')
+   * @param opts.maxTokens - max tokens to generate (default based on
+   *                         prompt)
    * @returns object with completions and optional token usage
    * @throws UnsupportedPromptError if FIM is requested but model is
    *         incompatible and fallback is disabled
@@ -97,7 +91,6 @@ export namespace InlineCompletion {
       position,
       log,
       prompt = 'chat',
-      modelName,
       fimFormat,
       maxTokens,
     } = opts;
@@ -106,30 +99,17 @@ export namespace InlineCompletion {
       ? time(log, 'info', 'InlineCompletion.generate')
       : undefined;
 
-    // Route to appropriate implementation
     if (prompt === 'fim') {
-      try {
-        return await FIM.generate({
-          model,
-          document,
-          position,
-          log,
-          format: fimFormat,
-          modelName,
-          maxTokens: maxTokens ?? 256, // FIM default: 256 tokens
-        });
-      } catch (err) {
-        // If FIM throws UnsupportedPromptError, log and re-throw
-        if (isUnsupportedPromptError(err)) {
-          log?.('warn', 'FIM not supported, re-throwing error', {
-            reason: err.reason,
-            modelName: err.modelName,
-          });
-          throw err;
-        }
-        // Re-throw other errors as-is
-        throw err;
-      }
+      // fimFormat is guaranteed to be defined when prompt='fim' because
+      // it's resolved during initialization in index.ts
+      return await FIM.generate({
+        model,
+        document,
+        position,
+        log,
+        fimFormat: fimFormat!,
+        maxTokens: maxTokens ?? 256,
+      });
     }
 
     // Default to Chat (doesn't accept maxTokens, uses fixed limit)

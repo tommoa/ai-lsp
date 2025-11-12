@@ -16,12 +16,7 @@ import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, type LanguageModel } from 'ai';
 import { Log, time, type TokenUsage, extractTokenUsage } from '../util';
-import {
-  buildFimPrompt,
-  buildFimStopSequences,
-  detectFimFormat,
-  type FimFormat,
-} from './fim-formats';
+import { buildFimPrompt, type FimTemplate } from './fim-formats';
 import { UnsupportedPromptError } from './errors';
 
 export namespace FIM {
@@ -41,13 +36,9 @@ export namespace FIM {
     position: TextDocumentPositionParams;
     log?: Log;
     /**
-     * FIM token format. If not specified, auto-detected from modelName.
+     * FIM template to use for prompt construction (required).
      */
-    format?: FimFormat;
-    /**
-     * Model name for FIM format detection.
-     */
-    modelName?: string;
+    fimFormat: FimTemplate;
     /**
      * Maximum tokens to generate (default: 256).
      * FIM completions are typically shorter than chat (50-256 tokens).
@@ -70,15 +61,7 @@ export namespace FIM {
    * @throws UnsupportedPromptError if the model doesn't support FIM
    */
   export async function generate(opts: GenerateOptions): Promise<Result> {
-    const {
-      model,
-      document,
-      position,
-      log,
-      format: explicitFormat,
-      modelName = '',
-      maxTokens = 256,
-    } = opts;
+    const { model, document, position, log, fimFormat, maxTokens = 256 } = opts;
 
     using _ = log
       ? time(log, 'info', 'InlineCompletion.FIM.generate')
@@ -90,13 +73,14 @@ export namespace FIM {
     const textBefore = docText.slice(0, offset);
     const textAfter = docText.slice(offset);
 
-    // Detect or use explicit format
-    const format = explicitFormat ?? detectFimFormat(modelName);
-    log?.('debug', `FIM format: ${format}`);
+    log?.('debug', `FIM format: ${fimFormat.name || 'custom'}`);
 
-    // Build FIM prompt with special tokens
-    const prompt = buildFimPrompt(textBefore, textAfter, format);
-    const stopSequences = buildFimStopSequences(format, textAfter);
+    // Build FIM prompt with template
+    const prompt = buildFimPrompt(fimFormat, {
+      prefix: textBefore,
+      suffix: textAfter,
+    });
+    const stopSequences = fimFormat.stop;
 
     log?.('debug', `FIM prompt length: ${prompt.length}`);
     log?.('debug', `FIM stop sequences: ${JSON.stringify(stopSequences)}`);
@@ -136,7 +120,6 @@ export namespace FIM {
         throw new UnsupportedPromptError(
           'fim',
           'Model does not support completion endpoint or FIM tokens',
-          modelName,
         );
       }
 

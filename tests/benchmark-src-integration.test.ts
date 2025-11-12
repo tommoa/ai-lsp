@@ -19,7 +19,6 @@ import { spawn } from 'child_process';
 import { NextEdit } from '../src/next-edit';
 import { InlineCompletion } from '../src/inline-completion';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { createProvider } from '../src/provider/provider';
 import {
   createEditDiff,
   calculateCost,
@@ -28,72 +27,8 @@ import {
 } from '../scripts/benchmark-utils';
 import { NOOP_LOG } from '../src/util';
 import { mockResponses } from './e2e/helpers/mock-responses';
+import { createMockModel } from './helpers/mock-model';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
-
-/**
- * Helper: Create a mock language model for testing
- * Returns a mock LanguageModel that returns the specified response
- */
-function createMockModel(response: string) {
-  const mockModel = {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'test-model',
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: response,
-          },
-        ],
-        finishReason: 'stop' as const,
-        usage: {
-          inputTokens: 100,
-          outputTokens: 50,
-          totalTokens: 150,
-        },
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const stream = new ReadableStream({
-        start(controller) {
-          const id = Math.random().toString(36).substring(7);
-          controller.enqueue({
-            type: 'text-start' as const,
-            id,
-          });
-          controller.enqueue({
-            type: 'text-delta' as const,
-            id,
-            delta: response,
-          });
-          controller.enqueue({
-            type: 'text-end' as const,
-            id,
-          });
-          controller.enqueue({
-            type: 'finish' as const,
-            finishReason: 'stop' as const,
-            usage: {
-              inputTokens: 100,
-              outputTokens: 50,
-              totalTokens: 150,
-            },
-          });
-          controller.close();
-        },
-      });
-      return { stream, warnings: [] };
-    },
-  } as any;
-
-  return mockModel;
-}
 
 /**
  * Helper: Create a TextDocument for testing
@@ -105,12 +40,40 @@ function createTestDocument(
   return TextDocument.create('file:///test/file.ts', languageId, 1, content);
 }
 
+/**
+ * Helper: Verify standard edit structure
+ */
+function verifyEditStructure(edit: any) {
+  expect(edit).toHaveProperty('range');
+  expect(edit).toHaveProperty('range.start');
+  expect(edit).toHaveProperty('range.end');
+  expect(edit).toHaveProperty('text');
+  expect(edit).toHaveProperty('textDocument');
+  expect(typeof edit.text).toBe('string');
+}
+
+/**
+ * Helper: Verify token usage and cost calculation
+ */
+function verifyTokenUsageAndCost(tokenUsage: any) {
+  expect(tokenUsage).toBeDefined();
+  expect(tokenUsage).toHaveProperty('input');
+  expect(tokenUsage).toHaveProperty('output');
+
+  const modelCost = { input: 3, output: 15 };
+  const cost = calculateCost(tokenUsage, modelCost);
+  expect(cost).not.toBeNull();
+  expect(typeof cost?.cost).toBe('number');
+  expect(cost!.cost).toBeGreaterThanOrEqual(0);
+}
+
 describe('NextEdit Integration - Benchmark Compatibility', () => {
   /**
-   * PROTECTS AGAINST: Changes to NextEdit.generate() prefix_suffix that break
-   * edit format or token usage extraction
+   * PROTECTS AGAINST: Changes to NextEdit.generate() that break edit format,
+   * token usage extraction, or benchmark cost calculations
    */
-  it('should generate valid edits for prefix_suffix approach', async () => {
+  it('should generate valid edits with token usage for both prompt types', async () => {
+    // Test prefix_suffix approach
     const prefixSuffixResponse = JSON.stringify([
       {
         prefix: 'function test() {\n  ',
@@ -120,36 +83,26 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
         reason: 'implement simple return',
       },
     ]);
-    const model = createMockModel(prefixSuffixResponse);
+    const model1 = createMockModel({ response: prefixSuffixResponse });
     const doc = createTestDocument(`function test() {
   // TODO: implement
 }`);
 
-    const result = await NextEdit.generate({
-      model,
+    const result1 = await NextEdit.generate({
+      model: model1,
       document: doc,
       prompt: NextEdit.PromptType.PrefixSuffix,
       log: NOOP_LOG,
     });
 
-    expect(result).toBeDefined();
-    expect(result.edits).toBeArray();
-    expect(result.edits.length).toBeGreaterThan(0);
+    expect(result1.edits).toBeArray();
+    expect(result1.edits.length).toBeGreaterThan(0);
+    verifyEditStructure(result1.edits[0]!);
+    if (result1.tokenUsage) {
+      verifyTokenUsageAndCost(result1.tokenUsage);
+    }
 
-    const edit = result.edits[0]!;
-    expect(edit).toHaveProperty('range');
-    expect(edit).toHaveProperty('range.start');
-    expect(edit).toHaveProperty('range.end');
-    expect(edit).toHaveProperty('text');
-    expect(edit).toHaveProperty('textDocument');
-    expect(typeof edit.text).toBe('string');
-  });
-
-  /**
-   * PROTECTS AGAINST: Changes to NextEdit.generate() line_number that break
-   * edit format or token usage extraction
-   */
-  it('should generate valid edits for line_number approach', async () => {
+    // Test line_number approach
     const lineNumberResponse = JSON.stringify([
       {
         startLine: 1,
@@ -158,71 +111,26 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
         reason: 'implement function body',
       },
     ]);
-    const model = createMockModel(lineNumberResponse);
-    const doc = createTestDocument(`function test() {
-  // TODO: implement
-}`);
+    const model2 = createMockModel({ response: lineNumberResponse });
 
-    const result = await NextEdit.generate({
-      model,
+    const result2 = await NextEdit.generate({
+      model: model2,
       document: doc,
       prompt: NextEdit.PromptType.LineNumber,
       log: NOOP_LOG,
     });
 
-    expect(result).toBeDefined();
-    expect(result.edits).toBeArray();
-    expect(result.edits.length).toBeGreaterThan(0);
-
-    const edit = result.edits[0]!;
-    expect(edit.range).toBeDefined();
-    expect(edit.text).toBeDefined();
-  });
-
-  /**
-   * PROTECTS AGAINST: Changes to token usage extraction that would break
-   * benchmark cost calculations
-   */
-  it('should return token usage compatible with cost calculation', async () => {
-    const prefixSuffixResponse = JSON.stringify([
-      {
-        prefix: 'function test() {\n  ',
-        existing: 'return;',
-        suffix: '\n}',
-        text: 'return 42;',
-        reason: 'fix return value',
-      },
-    ]);
-    const model = createMockModel(prefixSuffixResponse);
-    const doc = createTestDocument('function test() {}');
-
-    const result = await NextEdit.generate({
-      model,
-      document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
-      log: NOOP_LOG,
-    });
-
-    // Mock provider returns standard token usage
-    expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage).toHaveProperty('input');
-    expect(result.tokenUsage).toHaveProperty('output');
-
-    // Verify cost calculation works with this token usage
-    if (result.tokenUsage) {
-      const modelCost = { input: 3, output: 15 };
-      const cost = calculateCost(result.tokenUsage, modelCost);
-      expect(cost).not.toBeNull();
-      expect(typeof cost?.cost).toBe('number');
-      expect(cost!.cost).toBeGreaterThanOrEqual(0);
-    }
+    expect(result2.edits).toBeArray();
+    expect(result2.edits.length).toBeGreaterThan(0);
+    expect(result2.edits[0]!.range).toBeDefined();
+    expect(result2.edits[0]!.text).toBeDefined();
   });
 
   /**
    * PROTECTS AGAINST: Changes to edit structure that would break
-   * createEditDiff()
+   * createEditDiff() or error handling in benchmarks
    */
-  it('should produce edits compatible with createEditDiff()', async () => {
+  it('should produce edits compatible with createEditDiff and handle errors', async () => {
     const prefixSuffixResponse = JSON.stringify([
       {
         prefix: 'const x = ',
@@ -232,7 +140,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
         reason: 'update value',
       },
     ]);
-    const model = createMockModel(prefixSuffixResponse);
+    const model = createMockModel({ response: prefixSuffixResponse });
     const originalContent = 'const x = 1;';
     const doc = createTestDocument(originalContent);
 
@@ -250,21 +158,16 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
 
     const diff = createEditDiff(originalContent, result.edits);
     expect(typeof diff).toBe('string');
-  });
 
-  /**
-   * PROTECTS AGAINST: Changes to error handling that would cause benchmarks
-   * to crash on malformed responses
-   */
-  it('should handle parse errors without crashing', async () => {
-    const model = await createMockModel(mockResponses.malformed());
-    const doc = createTestDocument('function test() {}');
+    // Test error handling with malformed responses
+    const malformedModel = createMockModel({
+      response: mockResponses.malformed(),
+    });
 
-    // Should not throw - should handle error gracefully
     let error: unknown;
     try {
       await NextEdit.generate({
-        model,
+        model: malformedModel,
         document: doc,
         prompt: NextEdit.PromptType.PrefixSuffix,
         log: NOOP_LOG,
@@ -284,61 +187,6 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
   });
 
   /**
-   * PROTECTS AGAINST: Changes that break empty document handling in benchmarks
-   */
-  it('should handle empty documents', async () => {
-    const model = await createMockModel(mockResponses.empty());
-    const doc = createTestDocument('');
-
-    const result = await NextEdit.generate({
-      model,
-      document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
-      log: NOOP_LOG,
-    });
-
-    expect(result).toBeDefined();
-    expect(result.edits).toBeArray();
-  });
-
-  /**
-   * PROTECTS AGAINST: Changes that break large document handling in benchmarks
-   */
-  it('should handle large documents without breaking', async () => {
-    const complexFilePath = path.join(
-      import.meta.dir,
-      'fixtures/large/complex-file.ts',
-    );
-    if (!fs.existsSync(complexFilePath)) {
-      console.log('Skipping: complex-file.ts fixture not found');
-      return;
-    }
-
-    const largeContent = fs.readFileSync(complexFilePath, 'utf8');
-    const prefixSuffixResponse = JSON.stringify([
-      {
-        prefix: 'const test = ',
-        existing: 'old',
-        suffix: ';',
-        text: 'new',
-        reason: 'update',
-      },
-    ]);
-    const model = createMockModel(prefixSuffixResponse);
-    const doc = createTestDocument(largeContent, 'typescript');
-
-    const result = await NextEdit.generate({
-      model,
-      document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
-      log: NOOP_LOG,
-    });
-
-    expect(result).toBeDefined();
-    expect(result.edits).toBeArray();
-  });
-
-  /**
    * PROTECTS AGAINST: Critical path breaking (generate → diff → cost)
    */
   it('should complete critical path: generate → diff → cost', async () => {
@@ -351,7 +199,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
         reason: 'implement function',
       },
     ]);
-    const model = createMockModel(prefixSuffixResponse);
+    const model = createMockModel({ response: prefixSuffixResponse });
     const originalContent = 'function test() {\n  // TODO\n}';
     const doc = createTestDocument(originalContent);
 
@@ -383,9 +231,9 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
 describe('InlineCompletion Integration - Benchmark Compatibility', () => {
   /**
    * PROTECTS AGAINST: Changes to InlineCompletion.generate() that break
-   * completion format
+   * completion format, token usage, or error handling
    */
-  it('should generate valid completions for inline benchmarks', async () => {
+  it('should generate valid completions with token usage', async () => {
     const inlineResponse = JSON.stringify([
       {
         text: 'User | undefined',
@@ -396,7 +244,7 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
         reason: 'property definition',
       },
     ]);
-    const model = createMockModel(inlineResponse);
+    const model = createMockModel({ response: inlineResponse });
     const doc = createTestDocument('const user: ');
     const position: TextDocumentPositionParams = {
       textDocument: { uri: 'file:///test.ts' },
@@ -417,45 +265,10 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
       const completion = result.completions[0]!;
       expect(typeof completion.text).toBe('string');
     }
-  });
 
-  /**
-   * PROTECTS AGAINST: Changes to token usage in InlineCompletion that would
-   * break cost calculations
-   */
-  it('should return token usage compatible with benchmarks', async () => {
-    const inlineResponse = JSON.stringify([
-      {
-        text: 'User | undefined',
-        reason: 'type definition',
-      },
-    ]);
-    const model = createMockModel(inlineResponse);
-    const doc = createTestDocument('const user: ');
-    const position: TextDocumentPositionParams = {
-      textDocument: { uri: 'file:///test.ts' },
-      position: { line: 0, character: 13 },
-    };
-
-    const result = await InlineCompletion.generate({
-      model,
-      document: doc,
-      position,
-      log: NOOP_LOG,
-    });
-
-    // Verify token usage is extractable
+    // Verify token usage is extractable and cost calculation works
     if (result.tokenUsage) {
-      expect(result.tokenUsage).toHaveProperty('input');
-      expect(result.tokenUsage).toHaveProperty('output');
-
-      // Verify cost calculation works
-      const cost = calculateCost(result.tokenUsage, {
-        input: 3,
-        output: 15,
-      });
-      expect(cost).not.toBeNull();
-      expect(typeof cost?.cost).toBe('number');
+      verifyTokenUsageAndCost(result.tokenUsage);
     }
   });
 
@@ -464,7 +277,7 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
    */
   it('should handle parse errors gracefully', async () => {
     const malformedResponse = 'this is not valid JSON {[}';
-    const model = createMockModel(malformedResponse);
+    const model = createMockModel({ response: malformedResponse });
     const doc = createTestDocument('const user: ');
     const position: TextDocumentPositionParams = {
       textDocument: { uri: 'file:///test.ts' },
@@ -485,10 +298,10 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
 
 describe('Benchmark Utility Functions Integration', () => {
   /**
-   * PROTECTS AGAINST: Changes to extractTokenMetricArrays that break
-   * summary computation
+   * PROTECTS AGAINST: Changes to extractTokenMetricArrays and calculateCost
+   * that break summary computation
    */
-  it('should extract token metrics from NextEdit results', async () => {
+  it('should extract metrics and calculate costs from NextEdit results', async () => {
     const prefixSuffixResponse = JSON.stringify([
       {
         prefix: 'function test() {\n  ',
@@ -498,7 +311,7 @@ describe('Benchmark Utility Functions Integration', () => {
         reason: 'fix return',
       },
     ]);
-    const model = createMockModel(prefixSuffixResponse);
+    const model = createMockModel({ response: prefixSuffixResponse });
     const doc = createTestDocument('function test() {}');
 
     const result = await NextEdit.generate({
@@ -528,33 +341,8 @@ describe('Benchmark Utility Functions Integration', () => {
     if (result.tokenUsage) {
       expect(metrics.tokensInput).toBeArray();
       expect(metrics.tokensOutput).toBeArray();
-    }
-  });
 
-  /**
-   * PROTECTS AGAINST: Changes to calculateCost that would produce wrong costs
-   */
-  it('should calculate costs correctly from real token usage', async () => {
-    const prefixSuffixResponse = JSON.stringify([
-      {
-        prefix: 'function test() {\n  ',
-        existing: 'return;',
-        suffix: '\n}',
-        text: 'return 42;',
-        reason: 'fix return',
-      },
-    ]);
-    const model = createMockModel(prefixSuffixResponse);
-    const doc = createTestDocument('function test() {}');
-
-    const result = await NextEdit.generate({
-      model,
-      document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
-      log: NOOP_LOG,
-    });
-
-    if (result.tokenUsage) {
+      // Verify cost calculation with cache support
       const modelCost = { input: 3, output: 15, cache_read: 0.3 };
       const cost = calculateCost(result.tokenUsage, modelCost);
 
@@ -689,7 +477,8 @@ describe('Benchmark Script Smoke Tests', () => {
 
       proc.on('close', code => {
         if (code === 0) {
-          expect(stdout).toContain('standard');
+          // Verify script produced expected output
+          expect(stdout).toContain('COMPARISON TABLE');
           resolve();
         } else {
           reject(

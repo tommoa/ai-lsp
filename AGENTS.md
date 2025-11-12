@@ -16,7 +16,8 @@
 - **Formatting & Errors:** run Prettier/ESLint autofix before commits; throw or return errors; do not swallow
 - **Error messages:** use descriptive messages and avoid including secrets
 
-- **Agent checks:** run `bun tsc --noEmit`, `bun run lint` and `bun run index.ts` to validate changes
+- **Agent checks:** run `bun tsc --noEmit`, `bun run lint` and `bun run src/index.ts` to validate changes
 - **Cursor/Copilot:** follow any `.cursor` rules and `.github/copilot-instructions.md` if present
 
 - **Commits:** follow the style guide in `COMMIT-GUIDELINES.md`
+  - NEVER make a commit without explicit permission from the user

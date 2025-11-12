@@ -45,9 +45,14 @@ The `next_edit` mode generates code edits based on the full document context.
 
 #### `inline_completion`
 
-The `inline_completion` mode generates completions at the cursor position. Currently uses a single implementation that receives text before and after the cursor.
+The `inline_completion` mode generates completions at the cursor position. It can use either Fill-in-the-Middle (FIM) format for efficient code completion or chat-based completion.
 
 - **`model`** (optional): Override the global model for this mode
+- **`fimFormat`** (optional): FIM template to use for this mode
+  - Can be a template name: `"openai"`, `"starcoder"`, `"codellama"`, `"deepseek"`, or `"qwen"`
+  - Can be a custom template object with `prefix`, `middle`, and `suffix` tokens
+  - If not specified, the format will be auto-detected from the model name
+  - If auto-detection fails, defaults to OpenAI format
 
 ### Using Local Providers
 
@@ -102,6 +107,58 @@ init_options = {
     },
   },
   model = "lmstudio/your-model-name",
+}
+```
+
+### FIM Format Configuration
+
+The `fimFormat` option in `inline_completion` allows you to specify which Fill-in-the-Middle (FIM) format template to use. This is useful when auto-detection doesn't work or when you want to use a custom format.
+
+#### Explicit Template Names
+
+```lua
+init_options = {
+  model = "ollama/codellama",
+  inline_completion = {
+    -- Explicitly specify the CodeLlama format
+    fimFormat = "codellama",
+  },
+}
+```
+
+#### Auto-Detection (Default)
+
+If `fimFormat` is not specified, the system will auto-detect based on the model name:
+
+- Models with `codellama` → CodeLlama format
+- Models with `deepseek` → DeepSeek format
+- Models with `qwen` → Qwen format
+- Models with `starcoder` → StarCoder format
+- Everything else → OpenAI format (default)
+
+```lua
+init_options = {
+  model = "ollama/codegemma",
+  inline_completion = {
+    -- No fimFormat specified - will auto-detect or default to OpenAI
+  },
+}
+```
+
+#### Custom Template
+
+For models with non-standard FIM formats, you can define a custom template:
+
+```lua
+init_options = {
+  model = "custom-provider/custom-model",
+  inline_completion = {
+    fimFormat = {
+      prefix = "<|im_start|>user\n",
+      middle = "<|im_start|>assistant\n",
+      suffix = "<|im_end|>",
+    },
+  },
 }
 ```
 
