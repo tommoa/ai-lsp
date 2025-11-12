@@ -275,6 +275,7 @@ async function runSingleBenchmark(opts: {
           resultCode,
           `${testCase.name}.${testCase.language}`,
           criticModel,
+          'completion',
         );
         if (typeof rateRes === 'number') {
           scores.push(rateRes);

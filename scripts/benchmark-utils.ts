@@ -29,8 +29,20 @@ export type ParseErrorType =
   | 'conversion_failed'
   | 'generation_failed';
 
-const CRITIC_PROMPT =
-  'You are a strict code reviewer. All scores are out of 100. ' +
+const CRITIC_PROMPT_DIFF =
+  'You are a strict code reviewer evaluating code changes. ' +
+  'Rate the quality of the CHANGES shown in the diff, not the overall file. ' +
+  'All scores are out of 100. ' +
+  'Return ONLY a JSON object with the schema {"overall":number,...}. ' +
+  'Be concise.';
+
+const CRITIC_PROMPT_COMPLETION =
+  'You are a strict code reviewer evaluating an autocomplete suggestion. ' +
+  'The code shown includes the autocomplete result. ' +
+  'Rate ONLY the quality and appropriateness of the SUGGESTION itself, ' +
+  'not the overall file quality. ' +
+  'Consider: correctness, relevance, completeness. ' +
+  'All scores are out of 100. ' +
   'Return ONLY a JSON object with the schema {"overall":number,...}. ' +
   'Be concise.';
 
@@ -193,6 +205,7 @@ export async function rateChange(
   diff: string,
   filePath: string,
   criticModelStr: string,
+  mode: 'diff' | 'completion' = 'diff',
 ): Promise<number | null> {
   const ratingPayload = {
     metadata: {
@@ -211,7 +224,9 @@ export async function rateChange(
       log: NOOP_LOG,
     });
     const criticModelObj = criticFactory(modelName);
-    const promptText = `${CRITIC_PROMPT}\n${JSON.stringify(
+    const criticPrompt =
+      mode === 'completion' ? CRITIC_PROMPT_COMPLETION : CRITIC_PROMPT_DIFF;
+    const promptText = `${criticPrompt}\n${JSON.stringify(
       ratingPayload,
       null,
       2,
