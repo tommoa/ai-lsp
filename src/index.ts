@@ -66,7 +66,7 @@ interface NextEditModeConfig {
 interface InlineCompletionModeConfig {
   model?: string;
   prompt?: InlineCompletion.PromptType;
-  fimFormat?: string | FimTemplate;
+  fim_format?: string | FimTemplate;
 }
 
 interface InitOptions {
@@ -228,7 +228,7 @@ async function initModeConfigs(
   let fimFormat: FimTemplate | undefined;
   if (validatedInlinePrompt === InlineCompletion.PromptType.FIM) {
     fimFormat = resolveFimTemplate(
-      inlineCompletionOpts.fimFormat,
+      inlineCompletionOpts.fim_format,
       inlineCompletionModelId,
     );
     log('info', `FIM template: ${fimFormat.name || 'custom'}`);
