@@ -72,6 +72,37 @@ export function clip(s: string, n = 200): string {
   return s.slice(0, n) + '...';
 }
 
+/**
+ * Clean FIM completion response by removing markdown fences and echoed
+ * prompt context.
+ *
+ * Some chat models (like Google Gemini) respond to FIM prompts by:
+ * 1. Wrapping the response in markdown code fences
+ * 2. Including the prefix context before the actual completion
+ *
+ * This function strips both to extract just the new completion text.
+ *
+ * @param text - The raw completion text from the model
+ * @param prefix - The prefix context sent in the FIM prompt
+ * @returns Cleaned completion text
+ */
+export function cleanFimResponse(text: string, prefix: string): string {
+  const trimmed = text.trim();
+
+  // Strip markdown fences: handles both complete (```lang\ncode\n```)
+  // and incomplete (```lang\ncode) fences
+  const fence = trimmed.match(/^```\S*\n([\s\S]*?)(?:\n```)?$/);
+  let cleaned = fence?.[1] ?? text;
+
+  // If the response starts with the prefix, remove it to get just the
+  // completion
+  if (prefix && cleaned.startsWith(prefix)) {
+    cleaned = cleaned.slice(prefix.length);
+  }
+
+  return cleaned;
+}
+
 export function extractTokenUsage(res: any): TokenUsage | null {
   if (!res || typeof res !== 'object') return null;
 

@@ -15,7 +15,13 @@
 import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
 import { generateText, type LanguageModel } from 'ai';
-import { Log, time, type TokenUsage, extractTokenUsage } from '../util';
+import {
+  Log,
+  time,
+  type TokenUsage,
+  extractTokenUsage,
+  cleanFimResponse,
+} from '../util';
 import { buildFimPrompt, type FimTemplate } from './fim-formats';
 import { UnsupportedPromptError } from './errors';
 
@@ -94,8 +100,12 @@ export namespace FIM {
         stopSequences,
       });
 
-      const completionText = (res as { text?: string }).text ?? '';
+      let completionText = (res as { text?: string }).text ?? '';
       const tokenUsage = extractTokenUsage(res) ?? undefined;
+
+      // Clean FIM response: strip markdown fences and remove echoed prefix
+      // (some chat models like Gemini wrap responses and echo the prompt)
+      completionText = cleanFimResponse(completionText, textBefore);
 
       if (!completionText || completionText.trim().length === 0) {
         log?.('info', 'FIM: empty completion');
