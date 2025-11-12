@@ -268,19 +268,19 @@ async function runSingleBenchmark(opts: {
     let scores: number[] = [];
     let maxScore: number | undefined;
     if (critic && completions.length > 0) {
-      for (let i = 0; i < completions.length; i++) {
-        const completion = completions[i]!;
-        const resultCode = testCase.before + completion.text + testCase.after;
-        const rateRes = await rateChange(
-          resultCode,
-          `${testCase.name}.${testCase.language}`,
-          criticModel,
-          'completion',
-        );
-        if (typeof rateRes === 'number') {
-          scores.push(rateRes);
-        }
-      }
+      const rateResults = await Promise.all(
+        completions.map(async completion => {
+          const resultCode = testCase.before + completion.text + testCase.after;
+          const rateRes = await rateChange(
+            resultCode,
+            `${testCase.name}.${testCase.language}`,
+            criticModel,
+            'completion',
+          );
+          return typeof rateRes === 'number' ? rateRes : null;
+        }),
+      );
+      scores = rateResults.filter((score): score is number => score !== null);
       if (scores.length > 0) {
         maxScore = Math.max(...scores);
         const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
