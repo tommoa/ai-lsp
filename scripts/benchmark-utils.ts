@@ -1,14 +1,9 @@
 import path from 'path';
 import fs from 'fs';
 import { createProvider, parseModelString } from '../src/provider/provider';
-import { generateText, type ModelMessage, type LanguageModel } from 'ai';
+import { generateText, type ModelMessage } from 'ai';
 import type { ModelCost } from '../src/provider/module-resolver';
-import {
-  Parser,
-  NOOP_LOG,
-  type TokenUsage,
-  extractTokenUsage,
-} from '../src/util';
+import { Parser, NOOP_LOG, type TokenUsage } from '../src/util';
 
 export type TokenCost = {
   cost: number;

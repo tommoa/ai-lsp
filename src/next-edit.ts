@@ -27,7 +27,6 @@ import { Log, time, type TokenUsage } from './util';
 import { PrefixSuffix } from './next-edit/prefix-suffix';
 import { LineNumber } from './next-edit/line-number';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import type { ModelMessage } from 'ai';
 
 export namespace NextEdit {
   /**

@@ -86,7 +86,6 @@ describe('Chat.generate', () => {
       expect(result.completions![0]!.reason).toBe('');
       expect(result.completions![1]!.reason).toBe('has reason');
     });
-
   });
 
   describe('validation and filtering', () => {

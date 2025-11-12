@@ -204,7 +204,7 @@ export class ModuleResolver {
     try {
       const mod = await import(moduleSpecifier);
       if (mod) return mod as FactoryModule;
-    } catch (err) {
+    } catch {
       // If installs are disabled, surface a warning and bail out.
       if (!allowInstall) {
         log?.(

@@ -72,7 +72,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
    * PROTECTS AGAINST: Changes to NextEdit.generate() that break edit format,
    * token usage extraction, or benchmark cost calculations
    */
-  it('should generate valid edits with token usage for both prompt types', async () => {
+  it('should generate valid edits with token usage', async () => {
     // Test prefix_suffix approach
     const prefixSuffixResponse = JSON.stringify([
       {
@@ -130,7 +130,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
    * PROTECTS AGAINST: Changes to edit structure that would break
    * createEditDiff() or error handling in benchmarks
    */
-  it('should produce edits compatible with createEditDiff and handle errors', async () => {
+  it('should produce edits compatible with createEditDiff', async () => {
     const prefixSuffixResponse = JSON.stringify([
       {
         prefix: 'const x = ',
@@ -301,7 +301,7 @@ describe('Benchmark Utility Functions Integration', () => {
    * PROTECTS AGAINST: Changes to extractTokenMetricArrays and calculateCost
    * that break summary computation
    */
-  it('should extract metrics and calculate costs from NextEdit results', async () => {
+  it('should extract metrics and calculate costs from results', async () => {
     const prefixSuffixResponse = JSON.stringify([
       {
         prefix: 'function test() {\n  ',

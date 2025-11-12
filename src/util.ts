@@ -164,7 +164,7 @@ export namespace Parser {
         throw new Error('LLM response is not an array');
       }
       return parsed;
-    } catch (e) {
+    } catch {
       // Try to find a JSON array substring in the output. This is a
       // best-effort recovery for model outputs that include explanatory text.
       const parsed = extractJSON(raw, '[', ']');

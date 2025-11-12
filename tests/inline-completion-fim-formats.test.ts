@@ -11,15 +11,15 @@ describe('FIM Templates', () => {
     test('builds prompts for all built-in templates', () => {
       // OpenAI format
       const openai = BUILTIN_FIM_TEMPLATES['openai']!;
-      expect(buildFimPrompt(openai, { prefix: 'const x = ', suffix: ';' })).toBe(
-        '<fim_prefix>const x = <fim_suffix>;<fim_middle>',
-      );
+      expect(
+        buildFimPrompt(openai, { prefix: 'const x = ', suffix: ';' }),
+      ).toBe('<fim_prefix>const x = <fim_suffix>;<fim_middle>');
 
       // CodeLlama format
       const codellama = BUILTIN_FIM_TEMPLATES['codellama']!;
-      expect(buildFimPrompt(codellama, { prefix: 'def foo(', suffix: '):' })).toBe(
-        '▁<PRE>def foo(▁<SUF>):▁<MID>',
-      );
+      expect(
+        buildFimPrompt(codellama, { prefix: 'def foo(', suffix: '):' }),
+      ).toBe('▁<PRE>def foo(▁<SUF>):▁<MID>');
 
       // Qwen format with metadata
       const qwen = BUILTIN_FIM_TEMPLATES['qwen']!;
@@ -35,8 +35,13 @@ describe('FIM Templates', () => {
       // DeepSeek format
       const deepseek = BUILTIN_FIM_TEMPLATES['deepseek']!;
       expect(
-        buildFimPrompt(deepseek, { prefix: 'def add(a, b):', suffix: 'return a + b' }),
-      ).toBe('<｜fim▁begin｜>def add(a, b):<｜fim▁hole｜>return a + b<｜fim▁end｜>');
+        buildFimPrompt(deepseek, {
+          prefix: 'def add(a, b):',
+          suffix: 'return a + b',
+        }),
+      ).toBe(
+        '<｜fim▁begin｜>def add(a, b):<｜fim▁hole｜>return a + b<｜fim▁end｜>',
+      );
     });
 
     test('all built-in templates have required fields', () => {
@@ -56,9 +61,9 @@ describe('FIM Templates', () => {
         template: '<BEGIN>${prefix}<END>',
         stop: ['<END>'],
       };
-      expect(buildFimPrompt(template1, { prefix: 'code', suffix: 'more' })).toBe(
-        '<BEGIN>code<END>',
-      );
+      expect(
+        buildFimPrompt(template1, { prefix: 'code', suffix: 'more' }),
+      ).toBe('<BEGIN>code<END>');
 
       // Template defaults system
       const template2: FimTemplate = {

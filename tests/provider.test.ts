@@ -92,7 +92,7 @@ describe('createProvider', () => {
     expect(sel('gemini-flash-latest')).toBeDefined();
   });
 
-  it('should support provider config overrides (npm, apiKey, baseURL)', async () => {
+  it('should support provider config overrides', async () => {
     // Test npm override
     const sel1 = await createProvider({
       provider: 'google',

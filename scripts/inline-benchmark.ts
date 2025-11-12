@@ -7,10 +7,7 @@ import {
   getModelCostInfo,
   parseModelString,
 } from '../src/provider/provider';
-import {
-  BUILTIN_FIM_TEMPLATES,
-  autoDetectFimTemplate,
-} from '../src/inline-completion/fim-formats';
+import { autoDetectFimTemplate } from '../src/inline-completion/fim-formats';
 import type { LanguageModel } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { ModelCost } from '../src/provider/module-resolver';
@@ -19,8 +16,6 @@ import {
   type ParseErrorType,
   type TokenCost,
   type TestCase,
-  type TableMetric,
-  type NumberFormat,
   avg,
   classifyParseError,
   rateChange,
@@ -33,7 +28,6 @@ import {
   exportBenchmarkResults,
   shortenModelName,
   extractTokenMetricArrays,
-  formatNumber,
   formatNumberString,
   buildInlineApproachMetrics,
   buildInlineModelMetrics,

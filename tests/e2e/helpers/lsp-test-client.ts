@@ -249,7 +249,7 @@ export class LSPTestClient {
       await this.sendRequest('shutdown', null);
       // Send exit notification
       await this.sendNotification('exit', null);
-    } catch (err) {
+    } catch {
       // Server might already be dead
     }
 
@@ -433,12 +433,11 @@ export class LSPTestClient {
   /**
    * Wait for a notification from the server
    */
-  async waitForNotification(method: string, timeoutMs?: number): Promise<any> {
+  async waitForNotification(method: string, _timeoutMs?: number): Promise<any> {
     const connection = this.ensureConnection();
 
-    const timeout = timeoutMs ?? this.options.timeout;
     return this.withTimeout<any>(
-      new Promise((resolve, reject) => {
+      new Promise(resolve => {
         const disposable = connection.onNotification(method, (params: any) => {
           disposable.dispose();
           resolve(params);

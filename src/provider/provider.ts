@@ -310,7 +310,7 @@ export class ProviderRegistry {
     const vertexOptions = this.getVertexOptions(providerId, merged);
 
     // Extract known fields and pass everything else through as-is
-    const { npm, env, ...extraOverrides } = override ?? {};
+    const { npm: _npm, env: _env, ...extraOverrides } = override ?? {};
 
     return {
       apiKey,

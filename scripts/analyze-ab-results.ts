@@ -35,7 +35,7 @@ function parseArgs(): Record<string, string | undefined> {
   return out;
 }
 
-type AnalysisData = {
+type _AnalysisData = {
   scores: number[];
   genLatencies: number[];
   genTokensInput: number[];

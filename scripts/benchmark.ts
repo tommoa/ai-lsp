@@ -12,7 +12,6 @@ import type { ModelCost } from '../src/provider/module-resolver';
 import {
   type ParseErrorType,
   type TokenCost,
-  type TableMetric,
   avg,
   classifyParseError,
   createEditDiff,

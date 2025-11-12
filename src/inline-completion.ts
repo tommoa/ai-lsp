@@ -15,7 +15,6 @@ import { type LanguageModel } from 'ai';
 import { Log, time, type TokenUsage } from './util';
 import { Chat } from './inline-completion/chat';
 import { FIM } from './inline-completion/fim';
-import { isUnsupportedPromptError } from './inline-completion/errors';
 import { type FimTemplate } from './inline-completion/fim-formats';
 
 export namespace InlineCompletion {
