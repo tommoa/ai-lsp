@@ -1,0 +1,397 @@
+/**
+ * Provider system for dynamically loading and configuring AI model providers.
+ *
+ * This module provides two namespaces:
+ * - `Provider` - everything related to provider configuration and management
+ * - `Model` - everything related to model metadata and selection
+ *
+ * Configuration flows through 3 lifecycle stages:
+ * 1. Discovery: Provider.Manifest from models.dev (env as string[])
+ * 2. Override: Provider.Config from user (env as string[])
+ * 3. Runtime: Provider.FactoryArgs to factory (env as Record<string, string>)
+ */
+
+import type { LanguageModel } from 'ai';
+import { execSync } from 'child_process';
+import type { Log } from '../util';
+import { time } from '../util';
+
+// ============================================================================
+// Model Namespace
+// ============================================================================
+
+export namespace Model {
+  /**
+   * Cost describes the pricing for a model in dollars per million tokens.
+   * Includes input and output costs, with optional caching costs.
+   */
+  export interface Cost {
+    input: number;
+    output: number;
+    cache_read?: number;
+    cache_write?: number;
+  }
+
+  /**
+   * Info describes a model with its identifier, name, and cost.
+   */
+  export interface Info {
+    id: string;
+    name?: string;
+    cost?: Cost;
+  }
+
+  /**
+   * Selector maps a logical model name to a runtime LanguageModel instance.
+   */
+  export type Selector = (modelName: string) => LanguageModel;
+}
+
+// ============================================================================
+// Provider Namespace
+// ============================================================================
+
+export namespace Provider {
+  /**
+   * Manifest describes a provider with its metadata and configuration.
+   * This represents what we get from models.dev plus local defaults.
+   */
+  export interface Manifest {
+    id: string;
+    npm?: string;
+    env?: string[];
+    headers?: Record<string, string>;
+    api?: string;
+    name?: string;
+    models?: Record<string, Model.Info>;
+  }
+
+  /**
+   * Config represents provider configuration that can come from user
+   * overrides. All fields are optional to support partial overrides.
+   */
+  export interface Config {
+    npm?: string;
+    env?: string[];
+    headers?: Record<string, string>;
+    apiKey?: string;
+    baseURL?: string;
+    [key: string]: unknown;
+  }
+
+  /**
+   * FactoryArgs are the runtime arguments passed to a provider factory
+   * function. The key difference from Config is that env is transformed
+   * from string[] to Record<string, string>.
+   */
+  export interface FactoryArgs {
+    apiKey?: string;
+    baseURL?: string;
+    env?: Record<string, string>;
+    headers?: Record<string, string>;
+    [key: string]: unknown;
+  }
+
+  /**
+   * Factory is a function that returns a Model.Selector when given
+   * runtime args.
+   */
+  export type Factory = (args: FactoryArgs) => Model.Selector;
+
+  /**
+   * Parse provider and model name from a string like
+   * "anthropic/claude-3-5-sonnet".
+   */
+  export function parseModelString(modelStr: string): {
+    provider: string;
+    modelName: string;
+  } {
+    const parts = modelStr.split('/');
+    return {
+      provider: parts[0] ?? '',
+      modelName: parts.slice(1).join('/'),
+    };
+  }
+
+  /**
+   * Create a Model.Selector for the given provider.
+   * Handles:
+   * - Resolving provider manifests from models.dev and local defaults
+   * - Merging manifest data with user overrides
+   * - Dynamically loading provider npm packages (installing if needed)
+   */
+  export async function create(opts: {
+    provider: string;
+    providers?: Record<string, Config>;
+    allowInstall?: boolean;
+    log?: Log;
+  }): Promise<Model.Selector> {
+    const { provider, providers, allowInstall = true, log } = opts;
+    const override = providers?.[provider];
+
+    const manifest = await resolveManifest(provider, log);
+    if (!manifest && !override) {
+      log?.('warn', `No provider entry found for '${provider}'`);
+      return (modelName: string) => modelName as LanguageModel;
+    }
+
+    const merged = mergeConfig(provider, manifest, override);
+
+    let moduleSpecifier = merged.npm;
+    if (!moduleSpecifier) {
+      const msg = `Provider '${provider}' does not specify an npm package.`;
+      log?.('error', msg);
+      throw new Error(msg);
+    }
+
+    if (provider === 'google-vertex-anthropic') {
+      moduleSpecifier = `${moduleSpecifier}/anthropic`;
+      log?.('info', `Using Anthropic subpath for ${provider}`);
+    }
+
+    const mod = await loadModule(moduleSpecifier, log, allowInstall);
+    if (!mod) {
+      const errorMsg = `Failed to load module '${moduleSpecifier}'`;
+      log?.('error', errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    const factory = extractFactory(mod, moduleSpecifier, log);
+
+    using _ = log ? time(log, 'info', 'selector') : undefined;
+    const args = buildFactoryArgs(provider, merged, override);
+    log?.('debug', `provider factory args: ${JSON.stringify(args)}`);
+
+    return factory(args);
+  }
+
+  /**
+   * Get cost information for a specific model.
+   */
+  export async function getModelCost(
+    provider: string,
+    modelName: string,
+    log?: Log,
+  ): Promise<Model.Cost | undefined> {
+    const manifest = await resolveManifest(provider, log);
+    if (!manifest?.models) return undefined;
+
+    const modelInfo = manifest.models[modelName];
+    return modelInfo?.cost;
+  }
+}
+
+// ============================================================================
+// Internal Implementation
+// ============================================================================
+
+const LOCAL_PROVIDER_DEFAULTS: Record<string, Provider.Manifest> = {
+  ollama: {
+    id: 'ollama',
+    env: ['OLLAMA_API_KEY'],
+    npm: '@ai-sdk/openai-compatible',
+    api: 'http://localhost:11434/v1',
+    name: 'Ollama',
+    models: {
+      codegemma: {
+        id: 'codegemma',
+        name: 'CodeGemma',
+        cost: { input: 0, output: 0 },
+      },
+      codellama: {
+        id: 'codellama',
+        name: 'CodeLlama',
+        cost: { input: 0, output: 0 },
+      },
+      'deepseek-coder': {
+        id: 'deepseek-coder',
+        name: 'DeepSeek Coder',
+        cost: { input: 0, output: 0 },
+      },
+      'qwen2.5-coder': {
+        id: 'qwen2.5-coder',
+        name: 'Qwen 2.5 Coder',
+        cost: { input: 0, output: 0 },
+      },
+    },
+  },
+};
+
+let cachedModelsDevIndex: Record<string, Provider.Manifest> | null | undefined;
+
+async function fetchModelsDevIndex(
+  log?: Log,
+): Promise<Record<string, Provider.Manifest> | null> {
+  if (cachedModelsDevIndex !== undefined) return cachedModelsDevIndex;
+
+  try {
+    const res = await fetch('https://models.dev/api.json', {
+      cache: 'no-store',
+    });
+    if (!res.ok) return (cachedModelsDevIndex = null);
+
+    const json = (await res.json()) as Record<string, Provider.Manifest>;
+    return (cachedModelsDevIndex = json);
+  } catch (err) {
+    log?.('debug', `models.dev fetch failed: ${String(err)}`);
+    return (cachedModelsDevIndex = null);
+  }
+}
+
+async function resolveManifest(
+  provider: string,
+  log?: Log,
+): Promise<Provider.Manifest | undefined> {
+  const index = await fetchModelsDevIndex(log);
+
+  const manifest = {
+    ...LOCAL_PROVIDER_DEFAULTS[provider],
+    ...(index?.[provider] as Provider.Manifest | undefined),
+  };
+
+  if (!manifest.id) return undefined;
+
+  return manifest as Provider.Manifest;
+}
+
+async function loadModule(
+  moduleSpecifier: string,
+  log?: Log,
+  allowInstall = true,
+): Promise<Record<string, unknown> | null> {
+  if (!moduleSpecifier) {
+    log?.('error', 'No module name provided to load');
+    return null;
+  }
+
+  // Try to import the module first
+  try {
+    return await import(moduleSpecifier);
+  } catch {
+    // If import failed and installs are disabled, bail out
+    if (!allowInstall) {
+      log?.(
+        'warn',
+        `Module ${moduleSpecifier} not present and installs are disabled`,
+      );
+      return null;
+    }
+
+    // Attempt to install the package
+    log?.('info', `Installing package ${moduleSpecifier}...`);
+    try {
+      execSync(`bun install ${moduleSpecifier}@latest`, {
+        stdio: 'inherit',
+      });
+    } catch (installErr) {
+      log?.(
+        'error',
+        `Failed to install ${moduleSpecifier}: ${String(installErr)}`,
+      );
+      return null;
+    }
+
+    // Try importing again after installation
+    try {
+      return await import(moduleSpecifier);
+    } catch {
+      log?.('error', `Failed to import module '${moduleSpecifier}'`);
+      return null;
+    }
+  }
+}
+
+function extractFactory(
+  mod: Record<string, unknown>,
+  moduleSpecifier: string,
+  log?: Log,
+): Provider.Factory {
+  if (typeof mod === 'function') return mod as Provider.Factory;
+
+  if (mod.default && typeof mod.default === 'function') {
+    return mod.default as Provider.Factory;
+  }
+
+  const createKey = Object.keys(mod).find(key => key.startsWith('create'));
+  if (createKey) {
+    return mod[createKey] as Provider.Factory;
+  }
+
+  const msg = `Module '${moduleSpecifier}' does not export a factory function`;
+  log?.('error', msg);
+  throw new Error(msg);
+}
+
+function mergeConfig(
+  provider: string,
+  manifest: Provider.Manifest | undefined,
+  override: Provider.Config | undefined,
+): Provider.Manifest {
+  const mergedEnv = Array.from(
+    new Set([...(override?.env ?? []), ...(manifest?.env ?? [])]),
+  );
+
+  return {
+    ...manifest,
+    id: provider,
+    env: mergedEnv,
+    ...(override?.npm && { npm: override.npm }),
+    ...(override?.baseURL && { api: override.baseURL }),
+    ...(override?.headers && { headers: override.headers }),
+  } as Provider.Manifest;
+}
+
+function getVertexOptions(provider: string): Record<string, string> {
+  if (!provider.includes('google-vertex')) return {};
+
+  const findEnv = (candidates: string[]) =>
+    candidates.map(name => process.env[name]).find(Boolean);
+
+  const projectCandidates = [
+    'GOOGLE_VERTEX_PROJECT',
+    'GOOGLE_CLOUD_PROJECT',
+    'GCP_PROJECT',
+    'GCLOUD_PROJECT',
+  ];
+  const locationCandidates = [
+    'GOOGLE_VERTEX_LOCATION',
+    'GOOGLE_CLOUD_LOCATION',
+    'VERTEX_LOCATION',
+  ];
+
+  const project = findEnv(projectCandidates);
+  if (!project) return {};
+
+  return {
+    project,
+    location: findEnv(locationCandidates) ?? 'global',
+  };
+}
+
+function buildFactoryArgs(
+  provider: string,
+  merged: Provider.Manifest,
+  override?: Provider.Config,
+): Provider.FactoryArgs {
+  const envList = merged.env ?? [];
+  const envMap: Record<string, string> = {};
+  for (const name of envList) {
+    const v = process.env[name];
+    if (v) envMap[name] = v;
+  }
+
+  const apiKey = override?.apiKey ?? Object.values(envMap)[0] ?? '';
+  const baseURL = merged.api;
+
+  const vertexOptions = getVertexOptions(provider);
+
+  const { npm: _npm, env: _env, ...additionalArgs } = override ?? {};
+
+  return {
+    apiKey,
+    baseURL,
+    env: envMap,
+    ...vertexOptions,
+    ...additionalArgs,
+  };
+}

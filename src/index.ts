@@ -13,12 +13,7 @@ import {
 import { TextDocuments } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { type LanguageModel } from 'ai';
-import {
-  createProvider,
-  parseModelString,
-  ProviderInitOptions,
-  type ModelSelector,
-} from './provider/provider';
+import { Provider, Model } from './provider';
 import { InlineCompletion } from './inline-completion';
 import { NextEdit } from './next-edit';
 import { extractPartialWord } from './completion-utils';
@@ -54,7 +49,7 @@ function resolveFimTemplate(
 // top-level functions.
 // Selected provider selector (resolves model id to a concrete model
 // representation for `generateText`). Can be replaced during init.
-let provider: ModelSelector = (model: string) => model as any;
+let provider: Model.Selector = (model: string) => model as any;
 let SELECTED_MODEL: string | undefined = undefined;
 
 // Mode-specific configuration.
@@ -70,7 +65,7 @@ interface InlineCompletionModeConfig {
 }
 
 interface InitOptions {
-  providers?: Record<string, ProviderInitOptions>;
+  providers?: Record<string, Provider.Config>;
   model?: string;
   next_edit?: NextEditModeConfig;
   inline_completion?: InlineCompletionModeConfig;
@@ -126,7 +121,7 @@ const log: Log = (
 };
 
 type ProviderInitResult = {
-  factory: ModelSelector;
+  factory: Model.Selector;
   provider: string;
   model: LanguageModel;
   modelId: string;
@@ -142,12 +137,12 @@ async function initProvider(
     );
   }
 
-  const { providerId, modelName } = parseModelString(initOpts.model);
+  const { provider, modelName } = Provider.parseModelString(initOpts.model);
 
-  log('info', `provider=${providerId}, model=${modelName}`);
+  log('info', `provider=${provider}, model=${modelName}`);
 
-  const factory = await createProvider({
-    provider: providerId,
+  const factory = await Provider.create({
+    provider,
     log,
     providers: initOpts.providers,
   });
@@ -155,7 +150,7 @@ async function initProvider(
   try {
     return {
       factory,
-      provider: providerId,
+      provider,
       model: factory(modelName),
       modelId: modelName,
     };
@@ -167,7 +162,7 @@ async function initProvider(
 
 async function initModeConfigs(
   initOpts: InitOptions,
-  globalProvider: ModelSelector,
+  globalProvider: Model.Selector,
   globalModelId: string,
   log: Log,
 ): Promise<void> {

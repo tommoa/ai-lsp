@@ -2,15 +2,10 @@
 import fs from 'fs';
 import path from 'path';
 import { InlineCompletion } from '../src/inline-completion';
-import {
-  createProvider,
-  getModelCostInfo,
-  parseModelString,
-} from '../src/provider/provider';
+import { Provider, Model } from '../src/provider';
 import { autoDetectFimTemplate } from '../src/inline-completion/fim-formats';
 import type { LanguageModel } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import type { ModelCost } from '../src/provider/module-resolver';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
 import {
   type ParseErrorType,
@@ -198,7 +193,7 @@ async function runSingleBenchmark(opts: {
   runNum: number;
   totalRuns: number;
   languageModel: LanguageModel;
-  modelCost: ModelCost | undefined;
+  modelCost: Model.Cost | undefined;
   preview: boolean;
   critic: boolean;
   criticModel: string;
@@ -339,7 +334,7 @@ async function runApproachBenchmark(opts: {
   testCases: TestCase[];
   runs: number;
   concurrency: number;
-  modelCost: ModelCost | undefined;
+  modelCost: Model.Cost | undefined;
   preview: boolean;
   critic: boolean;
   criticModel: string;
@@ -362,9 +357,9 @@ async function runApproachBenchmark(opts: {
   );
 
   const runMetrics: RunMetrics[] = [];
-  const { providerId, modelName } = parseModelString(modelStr);
-  const factory = await createProvider({
-    provider: providerId,
+  const { provider, modelName } = Provider.parseModelString(modelStr);
+  const factory = await Provider.create({
+    provider,
     log: NOOP_LOG,
   });
   const languageModel = factory(modelName);
@@ -609,9 +604,9 @@ async function main(): Promise<void> {
     console.log(`Model: ${modelStr}`);
     console.log(`${'='.repeat(60)}`);
 
-    const { providerId, modelName } = parseModelString(modelStr);
+    const { provider, modelName } = Provider.parseModelString(modelStr);
 
-    const modelCost = await getModelCostInfo(providerId, modelName);
+    const modelCost = await Provider.getModelCost(provider, modelName);
 
     if (!modelCost) {
       console.warn(

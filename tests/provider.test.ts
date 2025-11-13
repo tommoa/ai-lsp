@@ -1,54 +1,49 @@
 import { describe, it, expect, afterEach, afterAll } from 'bun:test';
-import {
-  createProvider,
-  clearProviderCache,
-  parseModelString,
-} from '../src/provider/provider';
+import { Provider } from '../src/provider';
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  clearProviderCache();
 });
 
 afterAll(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe('parseModelString', () => {
+describe('Provider.parseModelString', () => {
   it('should parse provider/model format', () => {
-    const result = parseModelString('anthropic/claude-3-5-sonnet');
-    expect(result.providerId).toBe('anthropic');
+    const result = Provider.parseModelString('anthropic/claude-3-5-sonnet');
+    expect(result.provider).toBe('anthropic');
     expect(result.modelName).toBe('claude-3-5-sonnet');
   });
 
   it('should handle model names with slashes', () => {
-    const result = parseModelString('openai/gpt-4/turbo');
-    expect(result.providerId).toBe('openai');
+    const result = Provider.parseModelString('openai/gpt-4/turbo');
+    expect(result.provider).toBe('openai');
     expect(result.modelName).toBe('gpt-4/turbo');
   });
 
   it('should handle single part as provider', () => {
-    const result = parseModelString('google');
-    expect(result.providerId).toBe('google');
+    const result = Provider.parseModelString('google');
+    expect(result.provider).toBe('google');
     expect(result.modelName).toBe('');
   });
 
   it('should handle empty string', () => {
-    const result = parseModelString('');
-    expect(result.providerId).toBe('');
+    const result = Provider.parseModelString('');
+    expect(result.provider).toBe('');
     expect(result.modelName).toBe('');
   });
 
   it('should handle multiple slashes', () => {
-    const result = parseModelString('provider/model/variant/version');
-    expect(result.providerId).toBe('provider');
+    const result = Provider.parseModelString('provider/model/variant/version');
+    expect(result.provider).toBe('provider');
     expect(result.modelName).toBe('model/variant/version');
   });
 });
 
-describe('createProvider', () => {
+describe('Provider.create', () => {
   it('should return selector function when models.dev available', async () => {
     (globalThis as any).fetch = async () =>
       ({
@@ -62,7 +57,7 @@ describe('createProvider', () => {
         }),
       }) as any;
 
-    const sel = await createProvider({
+    const sel = await Provider.create({
       provider: 'google',
       allowInstall: false,
     });
@@ -82,7 +77,7 @@ describe('createProvider', () => {
         status: 500,
       }) as any;
 
-    const sel = await createProvider({
+    const sel = await Provider.create({
       provider: 'google',
       log: notify as any,
       allowInstall: false,
@@ -94,7 +89,7 @@ describe('createProvider', () => {
 
   it('should support provider config overrides', async () => {
     // Test npm override
-    const sel1 = await createProvider({
+    const sel1 = await Provider.create({
       provider: 'google',
       providers: {
         google: { npm: '@ai-sdk/openai' },
@@ -104,7 +99,7 @@ describe('createProvider', () => {
     expect(typeof sel1).toBe('function');
 
     // Test apiKey override
-    const sel2 = await createProvider({
+    const sel2 = await Provider.create({
       provider: 'anthropic',
       providers: {
         anthropic: {
@@ -117,7 +112,7 @@ describe('createProvider', () => {
     expect(typeof sel2).toBe('function');
 
     // Test baseURL override
-    const sel3 = await createProvider({
+    const sel3 = await Provider.create({
       provider: 'openai',
       providers: {
         openai: {
@@ -130,63 +125,17 @@ describe('createProvider', () => {
     expect(typeof sel3).toBe('function');
   });
 
-  it('should cache provider selectors', async () => {
-    const sel1 = await createProvider({
-      provider: 'google',
-      providers: {
-        google: { npm: '@ai-sdk/google' },
-      },
-      allowInstall: false,
-    });
-
-    const sel2 = await createProvider({
-      provider: 'google',
-      providers: {
-        google: { npm: '@ai-sdk/google' },
-      },
-      allowInstall: false,
-    });
-
-    // Should return same cached selector
-    expect(sel1).toBe(sel2);
-  });
-
   it('should handle network errors gracefully', async () => {
     (globalThis as any).fetch = async () => {
       throw new Error('Network error');
     };
 
-    const sel = await createProvider({
+    const sel = await Provider.create({
       provider: 'google',
       allowInstall: false,
     });
 
     // Should still return a function (fallback)
     expect(typeof sel).toBe('function');
-  });
-});
-
-describe('clearProviderCache', () => {
-  it('should clear cached providers', async () => {
-    const sel1 = await createProvider({
-      provider: 'google',
-      providers: {
-        google: { npm: '@ai-sdk/google' },
-      },
-      allowInstall: false,
-    });
-
-    clearProviderCache();
-
-    const sel2 = await createProvider({
-      provider: 'google',
-      providers: {
-        google: { npm: '@ai-sdk/google' },
-      },
-      allowInstall: false,
-    });
-
-    // After cache clear, should create new selector instance
-    expect(sel1).not.toBe(sel2);
   });
 });

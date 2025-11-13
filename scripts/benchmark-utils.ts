@@ -1,8 +1,7 @@
 import path from 'path';
 import fs from 'fs';
-import { createProvider, parseModelString } from '../src/provider/provider';
+import { Provider, Model } from '../src/provider';
 import { generateText, type ModelMessage } from 'ai';
-import type { ModelCost } from '../src/provider/module-resolver';
 import { Parser, NOOP_LOG, type TokenUsage } from '../src/util';
 
 export type TokenCost = {
@@ -59,7 +58,7 @@ export function classifyParseError(err: unknown): ParseErrorType {
 
 export function calculateCost(
   tokens: TokenUsage,
-  modelCost: ModelCost | undefined,
+  modelCost: Model.Cost | undefined,
 ): TokenCost | null {
   if (!modelCost) return null;
 
@@ -218,9 +217,9 @@ export async function rateChange(
   };
 
   try {
-    const { providerId, modelName } = parseModelString(criticModelStr);
-    const criticFactory = await createProvider({
-      provider: providerId,
+    const { provider, modelName } = Provider.parseModelString(criticModelStr);
+    const criticFactory = await Provider.create({
+      provider,
       log: NOOP_LOG,
     });
     const criticModelObj = criticFactory(modelName);
