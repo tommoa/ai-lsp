@@ -57,21 +57,56 @@ The commit body should explain the **why** and **context**, not just the what.
 5. **Be specific:** Reference actual functions, modules, or patterns
 6. **Include impact:** Explain how the change affects the system
 7. **Optional sections:** Can include "Future improvements" or related notes
+8. **Wrap at 72 characters:** Keep body lines at or below 72 characters for
+   proper display in git tools
 
 **Example body:**
 
 ```
-Introduces FIM completion as an efficient alternative to chat-based prompts
-for code-specific models. The modular structure separates FIM logic from
-chat completion, enabling low-latency inline completions with specialized
-models that support FIM formats.
+Introduces FIM completion as an efficient alternative to chat-based
+prompts for code-specific models. The modular structure separates FIM
+logic from chat completion, enabling low-latency inline completions
+with specialized models that support FIM formats.
 
-The FIM module automatically detects the correct format for popular models
-including CodeLlama, DeepSeek, StarCoder, and Qwen, while also supporting
-custom format configuration. The generate() function routes to Chat or FIM
-implementations based on a 'prompt' option, with graceful fallback handling
-via UnsupportedPromptError for incompatible models.
+The FIM module automatically detects the correct format for popular
+models including CodeLlama, DeepSeek, StarCoder, and Qwen, while also
+supporting custom format configuration. The generate() function routes
+to Chat or FIM implementations based on a 'prompt' option, with
+graceful fallback handling via UnsupportedPromptError for incompatible
+models.
 ```
+
+## Body Structure Patterns
+
+Recent commits follow a consistent multi-paragraph structure:
+
+**Paragraph 1: Motivation and Main Change**
+- State the problem or opportunity
+- Describe the primary solution or change
+- Example: "Merges module-resolver.ts and provider.ts into a single
+  provider/index.ts file organized using TypeScript namespaces (Provider
+  and Model). This improves code organization by clearly separating
+  provider configuration and management from model metadata and selection
+  concerns."
+
+**Paragraph 2: Technical Details**
+- Describe implementation specifics
+- List concrete changes (what was eliminated, renamed, or added)
+- Include API surface changes
+- Example: "The new structure eliminates the ProviderRegistry class in
+  favor of namespace functions, renames types for clarity
+  (ProviderInitOptions → Provider.Config), and updates the API surface
+  (createProvider → Provider.create)."
+
+**Paragraph 3: Impact and Scope** (optional)
+- Mention what was updated to use the new changes
+- Describe broader impact or benefits
+- Example: "All consumers including benchmark scripts, LSP server
+  initialization, and tests have been updated to use the new
+  namespace-based API."
+
+**For smaller changes:** A single focused paragraph is sufficient if it
+covers the motivation, approach, and impact concisely.
 
 ## Common Patterns
 
@@ -80,6 +115,10 @@ via UnsupportedPromptError for incompatible models.
 - Start with what the feature enables or provides
 - Explain the technical approach
 - Describe how components interact
+- Example: "Some chat models respond to FIM prompts by wrapping
+  completions in markdown code fences. This adds a cleanFimResponse()
+  utility that strips both to extract just the new completion text,
+  improving compatibility across different model providers."
 
 ### Fix commits
 
@@ -90,13 +129,27 @@ via UnsupportedPromptError for incompatible models.
 ### Refactor commits
 
 - Explain the motivation for restructuring
-- Describe the structural changes
-- Highlight benefits (maintainability, performance, etc.)
+- Describe the structural changes (what was merged, eliminated, renamed)
+- Highlight benefits (maintainability, clarity, organization)
+- Document API changes if applicable
+- Mention what was updated to use the new structure
+- Example: "Merges module-resolver.ts and provider.ts into a single
+  provider/index.ts file organized using TypeScript namespaces. This
+  improves code organization by clearly separating provider
+  configuration and management from model metadata and selection
+  concerns."
 
 ### Chore commits
 
 - Can be brief if the change is self-explanatory
 - Explain reasoning for dependency updates or config changes
+- For CI/automation: explain what is automated and why
+
+### Documentation commits
+
+- Summarize what documentation was improved or added
+- Note any renamed fields or API changes included
+- Mention organizational improvements
 
 ## Writing Process
 
@@ -105,13 +158,19 @@ via UnsupportedPromptError for incompatible models.
 3. **Choose the right type and scope**
 4. **Write the header:** Concise, imperative, lowercase
 5. **Draft the body:**
-   - Start with "why" and context
-   - Explain the approach
-   - Describe the impact
+   - Start with "why" and context (problem statement)
+   - Explain the approach (what was done)
+   - Describe the impact (benefits, what's affected)
+   - For refactors: include API changes and migration details
 6. **Review for style:**
    - Remove temporal words (now, new, currently)
    - Use imperative mood consistently
    - Keep it concise but complete
+   - Wrap lines at 72 characters
+7. **Structure multi-paragraph bodies:**
+   - First paragraph: motivation and main change
+   - Second paragraph: technical details or API changes
+   - Third paragraph (if needed): impact on consumers
 
 ## See Also
 
