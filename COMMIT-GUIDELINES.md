@@ -81,6 +81,7 @@ models.
 Recent commits follow a consistent multi-paragraph structure:
 
 **Paragraph 1: Motivation and Main Change**
+
 - State the problem or opportunity
 - Describe the primary solution or change
 - Example: "Merges module-resolver.ts and provider.ts into a single
@@ -90,6 +91,7 @@ Recent commits follow a consistent multi-paragraph structure:
   concerns."
 
 **Paragraph 2: Technical Details**
+
 - Describe implementation specifics
 - List concrete changes (what was eliminated, renamed, or added)
 - Include API surface changes
@@ -99,6 +101,7 @@ Recent commits follow a consistent multi-paragraph structure:
   (createProvider → Provider.create)."
 
 **Paragraph 3: Impact and Scope** (optional)
+
 - Mention what was updated to use the new changes
 - Describe broader impact or benefits
 - Example: "All consumers including benchmark scripts, LSP server
