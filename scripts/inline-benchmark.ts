@@ -23,12 +23,11 @@ import {
   exportBenchmarkResults,
   shortenModelName,
   extractTokenMetricArrays,
-  formatNumberString,
+  formatNumber,
   buildInlineApproachMetrics,
   buildInlineModelMetrics,
 } from './benchmark-utils';
 import { NOOP_LOG, type TokenUsage } from '../src/util';
-import { isUnsupportedPromptError } from '../src/inline-completion/errors';
 
 // ApproachType is derived from InlineCompletion.PromptType
 type ApproachType = 'chat' | 'fim';
@@ -297,22 +296,6 @@ async function runSingleBenchmark(opts: {
       parseErrorType,
     };
   } catch (e) {
-    // Skip if approach is not supported
-    if (isUnsupportedPromptError(e)) {
-      console.log(
-        `${approach} [${testCase.name}] SKIPPED: ` +
-          `Approach '${approach}' not supported by this model`,
-      );
-      return {
-        latency: 0,
-        parseSuccess: false,
-        completionCount: 0,
-        avgCompletionLength: 0,
-        parseErrorType: 'none',
-        skipped: true,
-      };
-    }
-
     parseErrorType = classifyParseError(e);
     console.error(
       `${approach} [${testCase.name}] generation failed ` +
@@ -482,43 +465,43 @@ function printSummary(summary: ApproachSummary): void {
     return;
   }
 
-  const avgLatencyStr = formatNumberString(
-    summary.avgLatency,
-    v => Math.round(v) + 'ms',
-  );
-  const p50LatencyStr = formatNumberString(
-    summary.p50Latency,
-    v => Math.round(v) + 'ms',
-  );
-  const p95LatencyStr = formatNumberString(
-    summary.p95Latency,
-    v => Math.round(v) + 'ms',
-  );
-  const avgInputTokensStr = formatNumberString(summary.avgInputTokens, v =>
-    String(Math.round(v)),
-  );
-  const avgOutputTokensStr = formatNumberString(summary.avgOutputTokens, v =>
-    String(Math.round(v)),
-  );
+  const avgLatencyStr = formatNumber(summary.avgLatency, { type: 'ms' });
+  const p50LatencyStr = formatNumber(summary.p50Latency, { type: 'ms' });
+  const p95LatencyStr = formatNumber(summary.p95Latency, { type: 'ms' });
+  const avgInputTokensStr = formatNumber(summary.avgInputTokens, {
+    type: 'round',
+  });
+  const avgOutputTokensStr = formatNumber(summary.avgOutputTokens, {
+    type: 'round',
+  });
   const parseSuccessRateStr = summary.parseSuccessRate.toFixed(1);
   const avgCompletionsStr = summary.avgCompletions.toFixed(2);
   const avgCompletionLengthStr = Math.round(summary.avgCompletionLength);
-  const avgScoreStr = formatNumberString(summary.avgScore, v => v.toFixed(1));
-  const maxScoreStr = formatNumberString(summary.maxScore, v => v.toFixed(1));
+  const avgScoreStr = formatNumber(summary.avgScore, {
+    type: 'fixed',
+    decimals: 1,
+  });
+  const maxScoreStr = formatNumber(summary.maxScore, {
+    type: 'fixed',
+    decimals: 1,
+  });
 
   let resultMsg =
     `\n=> ${summary.approach} avgLatency=${avgLatencyStr} ` +
     `(p50=${p50LatencyStr} p95=${p95LatencyStr}) ` +
     `genTokens=input:${avgInputTokensStr} output:${avgOutputTokensStr}`;
 
-  const costStr = formatNumberString(summary.avgCost, v => v.toFixed(6));
+  const costStr = formatNumber(summary.avgCost, {
+    type: 'fixed',
+    decimals: 6,
+  });
   resultMsg += ` cost=$${costStr}`;
 
   if (costStr !== 'N/A' && !Number.isNaN(summary.avgCostWithoutCache)) {
-    const costWithoutCacheStr = formatNumberString(
-      summary.avgCostWithoutCache,
-      v => v.toFixed(6),
-    );
+    const costWithoutCacheStr = formatNumber(summary.avgCostWithoutCache, {
+      type: 'fixed',
+      decimals: 6,
+    });
     resultMsg += ` uncached=$${costWithoutCacheStr}`;
   }
 

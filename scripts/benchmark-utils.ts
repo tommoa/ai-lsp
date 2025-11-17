@@ -131,17 +131,20 @@ export function createEditDiff(
       hunkLines.push(' ' + originalLines[i]);
     }
 
+    // Get the prefix from the first line and suffix from the last line
+    const startLine = originalLines[start.line] ?? '';
+    const endLine = originalLines[end.line] ?? '';
+    const before = startLine.slice(0, start.character);
+    const after = endLine.slice(end.character);
+
     // Add the old and new content
     if (start.line === end.line) {
       // Single line edit - show old and new versions
-      const line = originalLines[start.line] ?? '';
-      const before = line.slice(0, start.character);
-      const deleted = line.slice(start.character, end.character);
-      const after = line.slice(end.character);
+      const deleted = startLine.slice(start.character, end.character);
 
       // Show the old line only if something was deleted
       if (deleted) {
-        hunkLines.push('-' + line);
+        hunkLines.push('-' + startLine);
       }
       // Show the new line
       hunkLines.push('+' + before + edit.text + after);
@@ -151,10 +154,24 @@ export function createEditDiff(
         hunkLines.push('-' + originalLines[i]);
       }
 
-      // Add the new content
+      // Add the new content with prefix and suffix
       const newLines = edit.text.split('\n');
-      for (const newLine of newLines) {
-        hunkLines.push('+' + newLine);
+
+      if (newLines.length === 1) {
+        // Multi-line original collapsed to single line: needs both prefix and
+        // suffix
+        hunkLines.push('+' + before + newLines[0] + after);
+      } else {
+        // First line gets the prefix
+        hunkLines.push('+' + before + newLines[0]);
+
+        // Middle lines unchanged
+        for (let i = 1; i < newLines.length - 1; i++) {
+          hunkLines.push('+' + newLines[i]);
+        }
+
+        // Last line gets the suffix
+        hunkLines.push('+' + newLines[newLines.length - 1] + after);
       }
     }
 
@@ -491,16 +508,6 @@ export type NumberFormat =
   | { type: 'percent'; decimals?: number }
   | { type: 'ms' }
   | { type: 'round' };
-
-/**
- * Format a string representation of a number, returning 'N/A' if NaN
- */
-export function formatNumberString(
-  value: number,
-  formatter: (v: number) => string,
-): string {
-  return Number.isNaN(value) ? 'N/A' : formatter(value);
-}
 
 /**
  * Format a number with specified format type. Returns string or number

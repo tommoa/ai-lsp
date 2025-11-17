@@ -21,7 +21,7 @@ import {
   extractTokenMetricArrays,
   buildBenchmarkApproachMetrics,
   buildBenchmarkModelMetrics,
-  formatNumberString,
+  formatNumber,
 } from './benchmark-utils';
 import { NOOP_LOG, type TokenUsage } from '../src/util';
 
@@ -396,17 +396,17 @@ function printModelComparisonTable(
 }
 
 function printSummary(summary: ApproachSummary, runs: number): void {
-  const avgScoreStr = formatNumberString(summary.avgScore, v => v.toFixed(3));
-  const genAvgMsStr = formatNumberString(
-    summary.genAvgMs,
-    v => Math.round(v) + 'ms',
-  );
-  const genInputTokensStr = formatNumberString(summary.genAvgInputTokens, v =>
-    String(Math.round(v)),
-  );
-  const genOutputTokensStr = formatNumberString(summary.genAvgOutputTokens, v =>
-    String(Math.round(v)),
-  );
+  const avgScoreStr = formatNumber(summary.avgScore, {
+    type: 'fixed',
+    decimals: 3,
+  });
+  const genAvgMsStr = formatNumber(summary.genAvgMs, { type: 'ms' });
+  const genInputTokensStr = formatNumber(summary.genAvgInputTokens, {
+    type: 'round',
+  });
+  const genOutputTokensStr = formatNumber(summary.genAvgOutputTokens, {
+    type: 'round',
+  });
   const parseSuccessRateStr = summary.parseSuccessRate.toFixed(1);
   const avgHintsStr = summary.avgHintsPerRun.toFixed(2);
   const conversionRateStr = summary.avgConversionRate.toFixed(1);
@@ -416,14 +416,17 @@ function printSummary(summary: ApproachSummary, runs: number): void {
     `(${summary.valid}/${runs} valid) genAvg=${genAvgMsStr} ` +
     `genTokens=input:${genInputTokensStr} output:${genOutputTokensStr}`;
 
-  const costStr = formatNumberString(summary.genAvgCost, v => v.toFixed(6));
+  const costStr = formatNumber(summary.genAvgCost, {
+    type: 'fixed',
+    decimals: 6,
+  });
   resultMsg += ` genCost=$${costStr}`;
 
   if (costStr !== 'N/A' && !Number.isNaN(summary.genAvgCostWithoutCache)) {
-    const costWithoutCacheStr = formatNumberString(
-      summary.genAvgCostWithoutCache,
-      v => v.toFixed(6),
-    );
+    const costWithoutCacheStr = formatNumber(summary.genAvgCostWithoutCache, {
+      type: 'fixed',
+      decimals: 6,
+    });
     resultMsg += ` uncached:$${costWithoutCacheStr}`;
   }
 
