@@ -23,87 +23,8 @@ import {
 } from '../scripts/benchmark-utils';
 import { NOOP_LOG } from '../src/util';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
-
-/**
- * Helper: Create a mock model that throws an error
- */
-function createErrorMockModel(shouldThrow: boolean) {
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'test-model',
-    supportedUrls: {},
-
-    async doGenerate() {
-      if (shouldThrow) {
-        throw new Error('Mock provider error: generation failed');
-      }
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: '[]',
-          },
-        ],
-        finishReason: 'stop' as const,
-        usage: {
-          inputTokens: 100,
-          outputTokens: 50,
-          totalTokens: 150,
-        },
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.close();
-        },
-      });
-      return { stream, warnings: [] };
-    },
-  } as any;
-}
-
-/**
- * Helper: Create a mock model that returns malformed JSON
- */
-function createMalformedMockModel() {
-  return {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'test-model',
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'invalid json {[}',
-          },
-        ],
-        finishReason: 'stop' as const,
-        usage: {
-          inputTokens: 100,
-          outputTokens: 50,
-          totalTokens: 150,
-        },
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.close();
-        },
-      });
-      return { stream, warnings: [] };
-    },
-  } as any;
-}
+import { createMockModel } from './helpers/mock-core';
+import { mockResponses } from './helpers/mock-responses';
 
 /**
  * Helper: Create a mock model that returns invalid schema
@@ -159,7 +80,9 @@ describe('Error Classification - NextEdit', () => {
    * error classification in benchmarks
    */
   it('should classify provider errors correctly', async () => {
-    const model = createErrorMockModel(true);
+    const model = createMockModel({
+      throwError: 'Mock provider error: generation failed',
+    });
     const doc = createTestDocument('function test() {}');
 
     let error: unknown;
@@ -183,7 +106,7 @@ describe('Error Classification - NextEdit', () => {
    * PROTECTS AGAINST: Changes to JSON parsing that break error detection
    */
   it('should classify malformed JSON as parsing error', async () => {
-    const model = createMalformedMockModel();
+    const model = createMockModel({ response: mockResponses.malformed() });
     const doc = createTestDocument('function test() {}');
 
     let error: unknown;
@@ -305,7 +228,9 @@ describe('Error Classification - InlineCompletion', () => {
    * PROTECTS AGAINST: Changes to InlineCompletion error handling
    */
   it('should handle provider errors in inline completion', async () => {
-    const model = createErrorMockModel(true);
+    const model = createMockModel({
+      throwError: 'Mock provider error: generation failed',
+    });
     const doc = createTestDocument('const user: ');
     const position: TextDocumentPositionParams = {
       textDocument: { uri: 'file:///test.ts' },
@@ -329,7 +254,7 @@ describe('Error Classification - InlineCompletion', () => {
    * PROTECTS AGAINST: Changes to inline completion JSON parsing
    */
   it('should handle malformed JSON in inline completion', async () => {
-    const model = createMalformedMockModel();
+    const model = createMockModel({ response: mockResponses.malformed() });
     const doc = createTestDocument('const user: ');
     const position: TextDocumentPositionParams = {
       textDocument: { uri: 'file:///test.ts' },
@@ -501,7 +426,9 @@ describe('Error Resilience - Benchmark Continuity', () => {
    * instead of continuing after an error
    */
   it('should continue benchmark after NextEdit errors', async () => {
-    const errorModel = createErrorMockModel(true);
+    const errorModel = createMockModel({
+      throwError: 'Mock provider error: generation failed',
+    });
     const doc = createTestDocument('function test() {}');
 
     let caught = false;
@@ -519,7 +446,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
     expect(caught).toBe(true);
 
     // Verify we can still run another benchmark with a working model
-    const workingModel = createErrorMockModel(false);
+    const workingModel = createMockModel({ response: '[]' });
     const result = await NextEdit.generate({
       model: workingModel,
       document: doc,
@@ -536,7 +463,9 @@ describe('Error Resilience - Benchmark Continuity', () => {
    * to crash instead of returning null
    */
   it('should continue inline benchmarks after completion errors', async () => {
-    const errorModel = createErrorMockModel(true);
+    const errorModel = createMockModel({
+      throwError: 'Mock provider error: generation failed',
+    });
     const doc = createTestDocument('const x: ');
     const position: TextDocumentPositionParams = {
       textDocument: { uri: 'file:///test.ts' },
@@ -554,7 +483,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
     expect(result1).toBeDefined();
 
     // Should be able to run another completion
-    const workingModel = createErrorMockModel(false);
+    const workingModel = createMockModel({ response: '[]' });
     const result2 = await InlineCompletion.generate({
       model: workingModel,
       document: doc,

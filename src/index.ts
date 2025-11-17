@@ -18,10 +18,9 @@ import { InlineCompletion } from './inline-completion';
 import { NextEdit } from './next-edit';
 import { extractPartialWord } from './completion-utils';
 import { Level, Log, time } from './util';
-import { isUnsupportedPromptError } from './inline-completion/errors';
 import {
   autoDetectFimTemplate,
-  getBuiltinTemplate,
+  BUILTIN_FIM_TEMPLATES,
   type FimTemplate,
 } from './inline-completion/fim-formats';
 
@@ -40,7 +39,9 @@ function resolveFimTemplate(
     return configFormat;
   }
   if (typeof configFormat === 'string') {
-    return getBuiltinTemplate(configFormat) ?? getBuiltinTemplate('openai')!;
+    return (
+      BUILTIN_FIM_TEMPLATES[configFormat] ?? BUILTIN_FIM_TEMPLATES['openai']!
+    );
   }
   return autoDetectFimTemplate(modelId);
 }
@@ -327,25 +328,8 @@ connection.onCompletion(
         fimFormat: INLINE_COMPLETION_CONFIG.fimFormat,
       });
     } catch (err) {
-      if (isUnsupportedPromptError(err)) {
-        log(
-          'warn',
-          `Unsupported prompt type: ${err.prompt} for model ${err.modelName}`,
-        );
-        log('info', `Falling back to chat completion`);
-        // Fallback to chat completion
-        result = await InlineCompletion.generate({
-          model: INLINE_COMPLETION_CONFIG.model,
-          document: doc,
-          position: pos,
-          log,
-          prompt: InlineCompletion.PromptType
-            .Chat as InlineCompletion.PromptType,
-        });
-      } else {
-        log('error', `InlineCompletion.generate failed: ${String(err)}`);
-        throw err;
-      }
+      log('error', `InlineCompletion.generate failed: ${String(err)}`);
+      throw err;
     }
 
     const completions = result.completions;

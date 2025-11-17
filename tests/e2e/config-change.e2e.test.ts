@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { LSPTestClient } from './helpers/lsp-test-client';
 import { createTestClient } from './helpers/lsp-test-client';
 import { pos, setupTestDocument } from './helpers/test-utils';
-import { mockResponses } from './helpers/mock-responses';
+import { mockResponses } from '../helpers/mock-responses';
 
 describe('E2E: Configuration Changes', () => {
   let client: LSPTestClient;

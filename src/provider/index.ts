@@ -43,6 +43,9 @@ export namespace Model {
 
   /**
    * Selector maps a logical model name to a runtime LanguageModel instance.
+   *
+   * TODO: Wrap the `ai.LanguageModel` type to also include metadata.
+   *       This should let us pass around things like the cost much more easily.
    */
   export type Selector = (modelName: string) => LanguageModel;
 }
@@ -52,18 +55,52 @@ export namespace Model {
 // ============================================================================
 
 export namespace Provider {
+  export namespace Errors {
+    /**
+     * An error to indicate that configuration for this provider was not found.
+     */
+    export class ProviderNotFound extends Error {
+      constructor(provider: string) {
+        super(`Provider not found: ${provider}`);
+        this.name = 'ProviderNotFound';
+      }
+    }
+
+    /**
+     * An error to indicate that the NPM package to use for this provider was
+     * not found or not configured.
+     */
+    export class NoProviderNpm extends Error {
+      constructor(provider: string) {
+        super(`No npm package found for provider: ${provider}`);
+        this.name = 'NoProviderNpm';
+      }
+    }
+
+    /**
+     * An error to indicate that loading the provider package failed for some
+     * reason.
+     */
+    export class ProviderPackageError extends Error {
+      constructor(provider: string, message?: string) {
+        super(`The loading of the package for ${provider} failed: ${message}`);
+        this.name = 'ProviderPackageError';
+      }
+    }
+  }
+
   /**
    * Manifest describes a provider with its metadata and configuration.
    * This represents what we get from models.dev plus local defaults.
    */
   export interface Manifest {
     id: string;
-    npm?: string;
+    npm: string;
     env?: string[];
     headers?: Record<string, string>;
-    api?: string;
-    name?: string;
-    models?: Record<string, Model.Info>;
+    api: string;
+    name: string;
+    models: Record<string, Model.Info>;
   }
 
   /**
@@ -82,7 +119,7 @@ export namespace Provider {
   /**
    * FactoryArgs are the runtime arguments passed to a provider factory
    * function. The key difference from Config is that env is transformed
-   * from string[] to Record<string, string>.
+   * from string[] to Record<string, string>, with each env var being resolved.
    */
   export interface FactoryArgs {
     apiKey?: string;
@@ -127,42 +164,57 @@ export namespace Provider {
     log?: Log;
   }): Promise<Model.Selector> {
     const { provider, providers, allowInstall = true, log } = opts;
-    const override = providers?.[provider];
+    using _ = log ? time(log, 'info', 'Provider.create') : undefined;
 
+    const override = providers?.[provider];
     const manifest = await resolveManifest(provider, log);
     if (!manifest && !override) {
-      log?.('warn', `No provider entry found for '${provider}'`);
-      return (modelName: string) => modelName as LanguageModel;
+      // If neither the manifest nor the override include any information about
+      // this provider, then we should throw.
+      throw new Provider.Errors.ProviderNotFound(provider);
     }
 
     const merged = mergeConfig(provider, manifest, override);
 
     let moduleSpecifier = merged.npm;
     if (!moduleSpecifier) {
-      const msg = `Provider '${provider}' does not specify an npm package.`;
-      log?.('error', msg);
-      throw new Error(msg);
+      // If no package specifier was given for this provider, then we have no
+      // way of figuring out how to make requests to the model. We should bail.
+      //
+      // NOTE(tommoa): Maybe we could default to `@ai-sdk/openai-compatible`?
+      throw new Provider.Errors.NoProviderNpm(provider);
     }
 
     if (provider === 'google-vertex-anthropic') {
+      // Google Vertex Anthropic is actually in a subpath within the
+      // `@ai-sdk/google-vertex` package, which we need to fixup here.
       moduleSpecifier = `${moduleSpecifier}/anthropic`;
       log?.('info', `Using Anthropic subpath for ${provider}`);
     }
 
+    // Load the module for this provider.
+    //
+    // NOTE: This will throw if something goes wrong. We do not wrap in a
+    // try/catch here so that the error bubbles up.
     const mod = await loadModule(moduleSpecifier, log, allowInstall);
-    if (!mod) {
-      const errorMsg = `Failed to load module '${moduleSpecifier}'`;
-      log?.('error', errorMsg);
-      throw new Error(errorMsg);
+
+    // Extract out the `createXXX()` function that is used for making the model
+    // object.
+    // If the user has given us a valid package, but the package does not
+    // conform to the `@ai-sdk` format, then we'll throw here.
+    const createFunc = Object.keys(mod).find(key => key.startsWith('create'));
+    if (!createFunc) {
+      throw new Provider.Errors.ProviderPackageError(
+        moduleSpecifier,
+        'The module loaded, but does not conform to the @ai-sdk format',
+      );
     }
+    const providerFactory = mod[createFunc] as Provider.Factory;
 
-    const factory = extractFactory(mod, moduleSpecifier, log);
-
-    using _ = log ? time(log, 'info', 'selector') : undefined;
+    // Get the arguments that we need to pass to initialise the provider.
     const args = buildFactoryArgs(provider, merged, override);
-    log?.('debug', `provider factory args: ${JSON.stringify(args)}`);
 
-    return factory(args);
+    return providerFactory(args);
   }
 
   /**
@@ -179,41 +231,38 @@ export namespace Provider {
     const modelInfo = manifest.models[modelName];
     return modelInfo?.cost;
   }
+
+  /**
+   * @internal
+   * Reset the models.dev cache. Only for use in tests.
+   */
+  export function __resetCache(): void {
+    cachedModelsDevIndex = undefined;
+  }
 }
 
 // ============================================================================
 // Internal Implementation
 // ============================================================================
 
-const LOCAL_PROVIDER_DEFAULTS: Record<string, Provider.Manifest> = {
+const DefaultManifest: Record<string, Provider.Manifest> = {
+  // Ollama isn't included in models.dev, so we need to set it here.
   ollama: {
     id: 'ollama',
     env: ['OLLAMA_API_KEY'],
     npm: '@ai-sdk/openai-compatible',
     api: 'http://localhost:11434/v1',
     name: 'Ollama',
-    models: {
-      codegemma: {
-        id: 'codegemma',
-        name: 'CodeGemma',
-        cost: { input: 0, output: 0 },
-      },
-      codellama: {
-        id: 'codellama',
-        name: 'CodeLlama',
-        cost: { input: 0, output: 0 },
-      },
-      'deepseek-coder': {
-        id: 'deepseek-coder',
-        name: 'DeepSeek Coder',
-        cost: { input: 0, output: 0 },
-      },
-      'qwen2.5-coder': {
-        id: 'qwen2.5-coder',
-        name: 'Qwen 2.5 Coder',
-        cost: { input: 0, output: 0 },
-      },
-    },
+    models: {},
+  },
+  // The `mock` provider is used for testing.
+  mock: {
+    id: 'mock',
+    env: [],
+    npm: 'ai-lsp-mock-provider',
+    api: '',
+    name: 'Mock Provider',
+    models: {},
   },
 };
 
@@ -245,7 +294,7 @@ async function resolveManifest(
   const index = await fetchModelsDevIndex(log);
 
   const manifest = {
-    ...LOCAL_PROVIDER_DEFAULTS[provider],
+    ...DefaultManifest[provider],
     ...(index?.[provider] as Provider.Manifest | undefined),
   };
 
@@ -254,27 +303,27 @@ async function resolveManifest(
   return manifest as Provider.Manifest;
 }
 
+/**
+ * Attempt to import or install a module from a module specification.
+ *
+ * Throws: ProviderPackageError if importing fails for any reason.
+ */
 async function loadModule(
   moduleSpecifier: string,
   log?: Log,
   allowInstall = true,
-): Promise<Record<string, unknown> | null> {
-  if (!moduleSpecifier) {
-    log?.('error', 'No module name provided to load');
-    return null;
-  }
-
+): Promise<Record<string, unknown>> {
   // Try to import the module first
   try {
+    // NOTE: We need to await here for the try/catch to fire.
     return await import(moduleSpecifier);
   } catch {
     // If import failed and installs are disabled, bail out
     if (!allowInstall) {
-      log?.(
-        'warn',
-        `Module ${moduleSpecifier} not present and installs are disabled`,
+      throw new Provider.Errors.ProviderPackageError(
+        moduleSpecifier,
+        'Module not present and installs are disabled.',
       );
-      return null;
     }
 
     // Attempt to install the package
@@ -284,44 +333,22 @@ async function loadModule(
         stdio: 'inherit',
       });
     } catch (installErr) {
-      log?.(
-        'error',
-        `Failed to install ${moduleSpecifier}: ${String(installErr)}`,
+      throw new Provider.Errors.ProviderPackageError(
+        moduleSpecifier,
+        `Failed to install: ${String(installErr)}`,
       );
-      return null;
     }
 
-    // Try importing again after installation
-    try {
-      return await import(moduleSpecifier);
-    } catch {
-      log?.('error', `Failed to import module '${moduleSpecifier}'`);
-      return null;
-    }
+    // Try importing again after installation. If this doesn't work, we'll get
+    // the generic Bun import error.
+    return import(moduleSpecifier);
   }
 }
 
-function extractFactory(
-  mod: Record<string, unknown>,
-  moduleSpecifier: string,
-  log?: Log,
-): Provider.Factory {
-  if (typeof mod === 'function') return mod as Provider.Factory;
-
-  if (mod.default && typeof mod.default === 'function') {
-    return mod.default as Provider.Factory;
-  }
-
-  const createKey = Object.keys(mod).find(key => key.startsWith('create'));
-  if (createKey) {
-    return mod[createKey] as Provider.Factory;
-  }
-
-  const msg = `Module '${moduleSpecifier}' does not export a factory function`;
-  log?.('error', msg);
-  throw new Error(msg);
-}
-
+/**
+ * Merge two configurations from a provider together, from a base to an
+ * override.
+ */
 function mergeConfig(
   provider: string,
   manifest: Provider.Manifest | undefined,
@@ -341,12 +368,24 @@ function mergeConfig(
   } as Provider.Manifest;
 }
 
+/**
+ * Get the required extra arguments for initialising the Google Vertex provider
+ * (which also requires a project and location).
+ */
 function getVertexOptions(provider: string): Record<string, string> {
   if (!provider.includes('google-vertex')) return {};
 
   const findEnv = (candidates: string[]) =>
     candidates.map(name => process.env[name]).find(Boolean);
 
+  // For some reason, not all of these potential env vars are in `models.dev`.
+  // As of 2025-11-15 only the following are there (in order):
+  //   project:
+  //     GOOGLE_VERTEX_PROJECT
+  //   location:
+  //     GOOGLE_VERTEX_LOCATION
+  //   credentials:
+  //     GOOGLE_APPLICATION_CREDENTIALS
   const projectCandidates = [
     'GOOGLE_VERTEX_PROJECT',
     'GOOGLE_CLOUD_PROJECT',
@@ -368,11 +407,22 @@ function getVertexOptions(provider: string): Record<string, string> {
   };
 }
 
+/**
+ * Generate the arguments required to initialise the provider.
+ */
 function buildFactoryArgs(
   provider: string,
   merged: Provider.Manifest,
   override?: Provider.Config,
 ): Provider.FactoryArgs {
+  // `models.dev` includes a list of environment variables that may need to be
+  // passed to the provider (such as the API key). We grab all the environment
+  // variables, but if there is more than one, only the first is passed as the
+  // API key.
+  //
+  // tommoa: Do we need to be a bit smarter about this? Are there any patterns
+  // when there are multiple environment variables that we could use for other
+  // multi-env providers?
   const envList = merged.env ?? [];
   const envMap: Record<string, string> = {};
   for (const name of envList) {
@@ -381,10 +431,17 @@ function buildFactoryArgs(
   }
 
   const apiKey = override?.apiKey ?? Object.values(envMap)[0] ?? '';
-  const baseURL = merged.api;
+  const baseURL = merged.api; // baseURL is called `api` by `models.dev`.
 
+  // Some providers (in this case only Google Vertex) need some extra handling
+  // for the extra environment variables.
+  //
+  // TODO: Do this extra dance in a nice way for other multi-env providers (such
+  // as Bedrock).
   const vertexOptions = getVertexOptions(provider);
 
+  // The user may have given us some extra arguments to pass, so extract them
+  // from the user config.
   const { npm: _npm, env: _env, ...additionalArgs } = override ?? {};
 
   return {

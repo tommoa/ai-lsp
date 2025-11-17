@@ -33,6 +33,10 @@
         "typescript": "^5.9.3",
       },
     },
+    "tests/fixtures/bad-mock-provider": {
+      "name": "ai-lsp-bad-mock-provider",
+      "version": "1.0.0",
+    },
     "tests/fixtures/mock-provider": {
       "name": "ai-lsp-mock-provider",
       "version": "1.0.0",
@@ -186,6 +190,8 @@
     "agent-base": ["agent-base@7.1.4", "", {}, "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ=="],
 
     "ai": ["ai@5.0.89", "", { "dependencies": { "@ai-sdk/gateway": "2.0.7", "@ai-sdk/provider": "2.0.0", "@ai-sdk/provider-utils": "3.0.16", "@opentelemetry/api": "1.9.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-8Nq+ZojGacQrupoJEQLrTDzT5VtR3gyp5AaqFSV3tzsAXlYQ9Igb7QE3yeoEdzOk5IRfDwWL7mDCUD+oBg1hDA=="],
+
+    "ai-lsp-bad-mock-provider": ["ai-lsp-bad-mock-provider@workspace:tests/fixtures/bad-mock-provider"],
 
     "ai-lsp-mock-provider": ["ai-lsp-mock-provider@workspace:tests/fixtures/mock-provider"],
 

@@ -179,26 +179,10 @@ export class LSPTestClient {
     // Set up logging for debug mode
     this.setupConnectionLogging(opts.debug);
 
-    // Collect stderr for debugging
-    const stderrChunks: Buffer[] = [];
-    this.process.stderr.on('data', (chunk: Buffer) => {
-      stderrChunks.push(chunk);
-      if (opts.debug) {
-        console.error('[LSP stderr]', chunk.toString());
-      }
-    });
-
-    // Handle process errors
-    this.process.on('error', err => {
-      throw new Error(`LSP server process error: ${err.message}`);
-    });
-
     this.process.on('exit', code => {
       if (code !== 0 && code !== null) {
-        const stderr = Buffer.concat(stderrChunks).toString();
         if (opts.debug) {
           console.error(`LSP server exited with code ${code}`);
-          if (stderr) console.error('stderr:', stderr);
         }
       }
     });
@@ -428,23 +412,6 @@ export class LSPTestClient {
 
     this.log('send', method, params);
     await connection.sendNotification(method, params);
-  }
-
-  /**
-   * Wait for a notification from the server
-   */
-  async waitForNotification(method: string, _timeoutMs?: number): Promise<any> {
-    const connection = this.ensureConnection();
-
-    return this.withTimeout<any>(
-      new Promise(resolve => {
-        const disposable = connection.onNotification(method, (params: any) => {
-          disposable.dispose();
-          resolve(params);
-        });
-      }),
-      `notification:${method}`,
-    );
   }
 
   /**

@@ -26,8 +26,8 @@ import {
   extractTokenMetricArrays,
 } from '../scripts/benchmark-utils';
 import { NOOP_LOG } from '../src/util';
-import { mockResponses } from './e2e/helpers/mock-responses';
-import { createMockModel } from './helpers/mock-model';
+import { mockResponses } from './helpers/mock-responses';
+import { createMockModel } from './helpers/mock-core';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
 
 /**

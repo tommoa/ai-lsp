@@ -49,15 +49,3 @@ export class UnsupportedPromptError extends Error {
     Object.setPrototypeOf(this, UnsupportedPromptError.prototype);
   }
 }
-
-/**
- * Type guard to check if an error is an UnsupportedPromptError
- *
- * @param err - Error to check
- * @returns true if err is an UnsupportedPromptError
- */
-export function isUnsupportedPromptError(
-  err: unknown,
-): err is UnsupportedPromptError {
-  return err instanceof UnsupportedPromptError;
-}

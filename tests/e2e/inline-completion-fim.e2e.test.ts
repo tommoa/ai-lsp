@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { LSPTestClient } from './helpers/lsp-test-client';
 import { createTestClient } from './helpers/lsp-test-client';
 import { pos, setupTestDocument } from './helpers/test-utils';
+import { mockResponses } from '../helpers/mock-responses';
 
 describe('E2E: Inline Completion with FIM', () => {
   let client: LSPTestClient;
@@ -23,7 +24,7 @@ describe('E2E: Inline Completion with FIM', () => {
         providers: {
           mock: {
             npm: 'ai-lsp-mock-provider',
-            response: ' complete_text',
+            response: mockResponses.fim(),
           },
         },
         model: 'mock/deepseek-coder',

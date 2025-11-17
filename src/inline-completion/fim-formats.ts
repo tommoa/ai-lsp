@@ -83,18 +83,6 @@ export const BUILTIN_FIM_TEMPLATES: Record<string, FimTemplate> = {
 };
 
 /**
- * Get a built-in FIM template by ID with type safety.
- *
- * @param templateId - The template ID to retrieve
- * @returns The FIM template, or undefined if not found
- */
-export function getBuiltinTemplate(
-  templateId: string,
-): FimTemplate | undefined {
-  return BUILTIN_FIM_TEMPLATES[templateId];
-}
-
-/**
  * Auto-detect FIM template from model name.
  *
  * Uses heuristic matching on the model name to select an appropriate

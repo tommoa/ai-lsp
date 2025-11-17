@@ -4,7 +4,7 @@ import { createTestClient } from './helpers/lsp-test-client';
 import { pos, setupTestDocument } from './helpers/test-utils';
 import type { CompletionItem } from 'vscode-languageserver-protocol';
 import { CompletionItemKind } from 'vscode-languageserver-protocol';
-import { mockResponses } from './helpers/mock-responses';
+import { mockResponses } from '../helpers/mock-responses';
 
 describe('E2E: Error Scenarios', () => {
   let client: LSPTestClient;
@@ -108,6 +108,7 @@ describe('E2E: Error Scenarios', () => {
         providers: {
           mock: {
             npm: 'ai-lsp-mock-provider',
+            response: mockResponses.empty(),
             throwError: true,
           },
         },

@@ -20,70 +20,8 @@ import {
   type FimTemplate,
 } from '../src/inline-completion/fim-formats';
 import { NOOP_LOG } from '../src/util';
-
-/**
- * Create a mock language model that returns specified completion text
- */
-function createMockFimModel(completionText: string) {
-  const mockModel = {
-    specificationVersion: 'v2' as const,
-    provider: 'mock',
-    modelId: 'test-fim-model',
-    supportedUrls: {},
-
-    async doGenerate() {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: completionText,
-          },
-        ],
-        finishReason: 'stop' as const,
-        usage: {
-          inputTokens: 100,
-          outputTokens: 50,
-          totalTokens: 150,
-        },
-        warnings: [],
-      };
-    },
-
-    async doStream() {
-      const stream = new ReadableStream({
-        start(controller) {
-          const id = Math.random().toString(36).substring(7);
-          controller.enqueue({
-            type: 'text-start' as const,
-            id,
-          });
-          controller.enqueue({
-            type: 'text-delta' as const,
-            id,
-            delta: completionText,
-          });
-          controller.enqueue({
-            type: 'text-end' as const,
-            id,
-          });
-          controller.enqueue({
-            type: 'finish' as const,
-            finishReason: 'stop' as const,
-            usage: {
-              inputTokens: 100,
-              outputTokens: 50,
-              totalTokens: 150,
-            },
-          });
-          controller.close();
-        },
-      });
-      return { stream, warnings: [] };
-    },
-  } as any;
-
-  return mockModel;
-}
+import { createMockModel } from './helpers/mock-core';
+import { mockResponses } from './helpers/mock-responses';
 
 describe('FIM.generate', () => {
   describe('basic completion generation', () => {
@@ -99,7 +37,7 @@ describe('FIM.generate', () => {
         position: { line: 0, character: 13 }, // after 'hello + '
       };
 
-      const model = createMockFimModel(' sum');
+      const model = createMockModel({ response: ' sum' });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -126,7 +64,7 @@ describe('FIM.generate', () => {
         position: { line: 0, character: 11 },
       };
 
-      const model = createMockFimModel('pass');
+      const model = createMockModel({ response: 'pass' });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -151,7 +89,7 @@ describe('FIM.generate', () => {
         position: { line: 1, character: 12 }, // after 'a +'
       };
 
-      const model = createMockFimModel(' b;');
+      const model = createMockModel({ response: ' b;' });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -178,7 +116,7 @@ describe('FIM.generate', () => {
         position: { line: 0, character: 10 },
       };
 
-      const model = createMockFimModel('');
+      const model = createMockModel({ response: mockResponses.empty() });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -197,7 +135,7 @@ describe('FIM.generate', () => {
         position: { line: 0, character: 4 },
       };
 
-      const model = createMockFimModel('   \n\t  ');
+      const model = createMockModel({ response: '   \n\t  ' });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -221,7 +159,7 @@ describe('FIM.generate', () => {
         position: { line: 0, character: 0 },
       };
 
-      const model = createMockFimModel('// comment\n');
+      const model = createMockModel({ response: '// comment\n' });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -246,7 +184,7 @@ describe('FIM.generate', () => {
         position: { line: 2, character: 1 }, // after '}'
       };
 
-      const model = createMockFimModel('');
+      const model = createMockModel({ response: mockResponses.empty() });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -299,6 +237,45 @@ describe('FIM.generate', () => {
         expect(typedErr.prompt).toBe('fim');
       }
     });
+
+    it('should re-throw non-FIM errors', async () => {
+      const doc = TextDocument.create(
+        'file:///test.ts',
+        'typescript',
+        1,
+        'const x = ',
+      );
+      const position: TextDocumentPositionParams = {
+        textDocument: { uri: 'file:///test.ts' },
+        position: { line: 0, character: 10 },
+      };
+
+      const errorModel = {
+        specificationVersion: 'v2' as const,
+        provider: 'mock',
+        modelId: 'test',
+        supportedUrls: {},
+        async doGenerate() {
+          throw new Error('Network timeout occurred');
+        },
+        async doStream() {
+          throw new Error('Network timeout occurred');
+        },
+      } as any;
+
+      try {
+        await FIM.generate({
+          model: errorModel,
+          document: doc,
+          position,
+          fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+        });
+        expect.unreachable('Should have thrown error');
+      } catch (err) {
+        expect(err).toBeInstanceOf(Error);
+        expect(String(err)).toContain('Network timeout');
+      }
+    });
   });
 
   describe('custom FIM templates', () => {
@@ -320,7 +297,7 @@ describe('FIM.generate', () => {
         stop: ['[SUFFIX]', '[PREFIX]', '\n\n'],
       };
 
-      const model = createMockFimModel('"Hello, world!"');
+      const model = createMockModel({ response: '"Hello, world!"' });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -349,7 +326,7 @@ describe('FIM.generate', () => {
         },
       };
 
-      const model = createMockFimModel('42');
+      const model = createMockModel({ response: '42' });
       const result = await FIM.generate({
         model,
         document: doc,
@@ -376,7 +353,7 @@ describe('FIM.generate', () => {
         position: { line: 0, character: 10 },
       };
 
-      const model = createMockFimModel(' fim_completion');
+      const model = createMockModel({ response: ' fim_completion' });
       const result = await InlineCompletion.generate({
         model,
         document: doc,

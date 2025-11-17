@@ -35,6 +35,22 @@ describe('LineNumber', () => {
       expect(() => LineNumber.parseLLMResponse(raw)).toThrow();
     });
 
+    it('should throw on non-object hint', () => {
+      const raw = JSON.stringify([null]);
+      expect(() => LineNumber.parseLLMResponse(raw)).toThrow(
+        'Invalid hint shape',
+      );
+    });
+
+    it('should throw on hint with wrong field types', () => {
+      const raw = JSON.stringify([
+        { startLine: '1', endLine: 2, text: 'test' },
+      ]);
+      expect(() => LineNumber.parseLLMResponse(raw)).toThrow(
+        'Invalid hint shape',
+      );
+    });
+
     it('should extract JSON from wrapped response', () => {
       const raw =
         'Here is my suggestion: ' +

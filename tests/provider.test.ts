@@ -5,6 +5,7 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  Provider.__resetCache();
 });
 
 afterAll(() => {
@@ -44,26 +45,28 @@ describe('Provider.parseModelString', () => {
 });
 
 describe('Provider.create', () => {
-  it('should return selector function when models.dev available', async () => {
+  it('should load provider using models.dev manifest', async () => {
+    // Mock models.dev to return manifest for mock provider
     (globalThis as any).fetch = async () =>
       ({
         ok: true,
         json: async () => ({
-          google: {
-            id: 'google',
-            npm: '@ai-sdk/google',
-            env: ['GOOGLE_API_KEY'],
+          mock: {
+            id: 'mock',
+            npm: 'ai-lsp-mock-provider',
+            env: ['MOCK_API_KEY'],
           },
         }),
       }) as any;
 
+    // Should successfully load using only models.dev data + defaults
     const sel = await Provider.create({
-      provider: 'google',
+      provider: 'mock',
       allowInstall: false,
     });
 
     expect(typeof sel).toBe('function');
-    expect(sel('gemini-flash-latest')).toBeDefined();
+    expect(sel('test-model')).toBeDefined();
   });
 
   it('should fallback when models.dev unavailable', async () => {
@@ -78,21 +81,55 @@ describe('Provider.create', () => {
       }) as any;
 
     const sel = await Provider.create({
-      provider: 'google',
+      provider: 'mock',
+      providers: {
+        mock: { response: 'test response' },
+      },
       log: notify as any,
       allowInstall: false,
     });
 
     expect(typeof sel).toBe('function');
-    expect(sel('gemini-flash-latest')).toBeDefined();
+    expect(sel('test-model')).toBeDefined();
+  });
+
+  it('should use a subpath for google-vertex-anthropic', async () => {
+    const messages: string[] = [];
+    const notify = (level: string, msg: string) =>
+      messages.push(`${level}:${msg}`);
+
+    try {
+      // If the package is installed, this should succeed and use the subpath
+      const sel1 = await Provider.create({
+        provider: 'google-vertex-anthropic',
+        log: notify as any,
+        allowInstall: false,
+      });
+      expect(typeof sel1).toBe('function');
+    } catch (err) {
+      // If the package is not installed, we should get a ProviderPackageError
+      // This is acceptable behavior when the package isn't available
+      expect(err).toBeInstanceOf(Provider.Errors.ProviderPackageError);
+      expect((err as Error).message).toContain(
+        '@ai-sdk/google-vertex/anthropic',
+      );
+      expect((err as Error).message).toContain(
+        'Module not present and installs are disabled',
+      );
+    }
+
+    // Ensure the log message about using the subpath was emitted regardless
+    expect(messages).toContainEqual(
+      'info:Using Anthropic subpath for google-vertex-anthropic',
+    );
   });
 
   it('should support provider config overrides', async () => {
-    // Test npm override
+    // Test npm override - use mock provider for all
     const sel1 = await Provider.create({
-      provider: 'google',
+      provider: 'test1',
       providers: {
-        google: { npm: '@ai-sdk/openai' },
+        test1: { npm: 'ai-lsp-mock-provider', response: 'test1 response' },
       },
       allowInstall: false,
     });
@@ -100,11 +137,12 @@ describe('Provider.create', () => {
 
     // Test apiKey override
     const sel2 = await Provider.create({
-      provider: 'anthropic',
+      provider: 'test2',
       providers: {
-        anthropic: {
-          npm: '@ai-sdk/anthropic',
+        test2: {
+          npm: 'ai-lsp-mock-provider',
           apiKey: 'test-key-123',
+          response: 'test2 response',
         },
       },
       allowInstall: false,
@@ -113,11 +151,12 @@ describe('Provider.create', () => {
 
     // Test baseURL override
     const sel3 = await Provider.create({
-      provider: 'openai',
+      provider: 'test3',
       providers: {
-        openai: {
-          npm: '@ai-sdk/openai',
+        test3: {
+          npm: 'ai-lsp-mock-provider',
           baseURL: 'https://custom-endpoint.com',
+          response: 'test3 response',
         },
       },
       allowInstall: false,
@@ -131,11 +170,76 @@ describe('Provider.create', () => {
     };
 
     const sel = await Provider.create({
-      provider: 'google',
+      provider: 'mock',
+      providers: {
+        mock: { response: 'test response' },
+      },
+      log: (level, message, extra) => console.log(level, message, extra),
       allowInstall: false,
     });
 
     // Should still return a function (fallback)
     expect(typeof sel).toBe('function');
+  });
+
+  it('should throw if the provider is ill-defined', async () => {
+    // Provider with no definitions.
+    expect(
+      Provider.create({
+        provider: 'fake',
+        allowInstall: false,
+      }),
+    ).rejects.toThrow('Provider not found: fake');
+    // Provider with a definition but no npm package.
+    expect(
+      Provider.create({
+        provider: 'fake',
+        providers: {
+          fake: {},
+        },
+        allowInstall: false,
+      }),
+    ).rejects.toThrow('No npm package found for provider: fake');
+    // Provider with a definition and npm package, but the package can't be
+    // installed.
+    expect(
+      Provider.create({
+        provider: 'fake',
+        providers: {
+          fake: {
+            npm: '@ai-sdk/fake',
+          },
+        },
+        allowInstall: false,
+      }),
+    ).rejects.toThrow('Module not present and installs are disabled.');
+    // Provider with a definition and npm package, but the package doesn't
+    // exist.
+    expect(
+      Provider.create({
+        provider: 'fake',
+        providers: {
+          fake: {
+            npm: '@ai-sdk/fake',
+          },
+        },
+        allowInstall: true,
+      }),
+    ).rejects.toThrow('Command failed: bun install @ai-sdk/fake@latest');
+  });
+
+  it('should throw when provider package has no @ai-sdk api', async () => {
+    // Provider package exists but doesn't export a createXXX function
+    expect(
+      Provider.create({
+        provider: 'bad',
+        providers: {
+          bad: {
+            npm: 'ai-lsp-bad-mock-provider',
+          },
+        },
+        allowInstall: false,
+      }),
+    ).rejects.toThrow('does not conform to the @ai-sdk format');
   });
 });

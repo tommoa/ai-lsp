@@ -16,13 +16,6 @@ export function testUri(filename: string): string {
 }
 
 /**
- * Wait for a specified amount of time
- */
-export function wait(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
  * Setup helper for common test scenarios
  */
 export async function setupTestDocument(

@@ -1,0 +1,7 @@
+{
+  "name": "ai-lsp-bad-mock-provider",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "description": "Bad mock provider that doesn't conform to @ai-sdk format",
+  "type": "module"
+}

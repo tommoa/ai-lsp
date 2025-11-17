@@ -15,7 +15,7 @@ import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { Chat } from '../src/inline-completion/chat';
 import { InlineCompletion } from '../src/inline-completion';
 import { NOOP_LOG } from '../src/util';
-import { createMockModel } from './helpers/mock-model';
+import { createMockModel } from './helpers/mock-core';
 
 describe('Chat.generate', () => {
   const testDoc = TextDocument.create(

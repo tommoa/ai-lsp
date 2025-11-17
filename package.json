@@ -4,7 +4,8 @@
   "type": "module",
   "private": true,
   "workspaces": [
-    "tests/fixtures/mock-provider"
+    "tests/fixtures/mock-provider",
+    "tests/fixtures/bad-mock-provider"
   ],
   "scripts": {
     "format": "prettier --write .",
