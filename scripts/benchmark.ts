@@ -2,7 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { NextEdit } from '../src/next-edit';
-import { Provider, Model } from '../src/provider';
+import { Provider } from '../src/provider';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   type ParseErrorType,
@@ -155,7 +155,6 @@ async function runApproachBenchmark(opts: {
   doc: string;
   criticModel: string;
   enableCritic: boolean;
-  modelCost: Model.Cost | undefined;
   preview: boolean;
   context: number;
   noColor: boolean;
@@ -169,7 +168,6 @@ async function runApproachBenchmark(opts: {
     doc,
     criticModel,
     enableCritic,
-    modelCost,
     preview,
     noColor,
   } = opts;
@@ -185,7 +183,7 @@ async function runApproachBenchmark(opts: {
     provider,
     log: NOOP_LOG,
   });
-  const languageModel = factory(modelName);
+  const model = factory(modelName);
 
   await runConcurrent(runs, concurrency, async idx => {
     console.log(`${approach} run ${idx + 1}/${runs}...`);
@@ -212,7 +210,7 @@ async function runApproachBenchmark(opts: {
             ? NextEdit.PromptType.PrefixSuffix
             : NextEdit.PromptType.LineNumber;
         const result = await NextEdit.generate({
-          model: languageModel,
+          model: model.model,
           document: docObj,
           prompt: promptType,
           log: NOOP_LOG,
@@ -243,7 +241,9 @@ async function runApproachBenchmark(opts: {
       console.log(`${approach} generation latency=${genLatency}ms`);
 
       // Calculate cost from token usage
-      const cost = tokenUsage ? calculateCost(tokenUsage, modelCost) : null;
+      const cost = tokenUsage
+        ? calculateCost(tokenUsage, model.info?.cost)
+        : null;
       const metrics =
         tokenUsage && cost ? { ...tokenUsage, ...cost } : undefined;
       if (metrics) {
@@ -502,17 +502,6 @@ async function main(): Promise<void> {
     console.log(`Model: ${modelStr}`);
     console.log(`${'='.repeat(60)}`);
 
-    const { provider, modelName } = Provider.parseModelString(modelStr);
-
-    const modelCost = await Provider.getModelCost(provider, modelName);
-
-    if (!modelCost) {
-      console.warn(
-        `Warning: No cost data found for ${modelStr}. ` +
-          'Cost calculations will be unavailable.',
-      );
-    }
-
     const summaries: ApproachSummary[] = [];
     const resultsMap = new Map<ApproachType, RunMetrics[]>();
 
@@ -527,7 +516,6 @@ async function main(): Promise<void> {
           doc,
           criticModel: opts.criticModel,
           enableCritic: opts.critic,
-          modelCost,
           preview: opts.preview,
           context: opts.context,
           noColor: opts.noColor,

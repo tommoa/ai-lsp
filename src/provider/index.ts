@@ -42,12 +42,20 @@ export namespace Model {
   }
 
   /**
-   * Selector maps a logical model name to a runtime LanguageModel instance.
-   *
-   * TODO: Wrap the `ai.LanguageModel` type to also include metadata.
-   *       This should let us pass around things like the cost much more easily.
+   * A wrapper that ensures that the required metadata can be passed around with
+   * an `ai.LanguageModel`.
    */
-  export type Selector = (modelName: string) => LanguageModel;
+  export class Model {
+    constructor(
+      public model: LanguageModel,
+      public info?: Info,
+    ) {}
+  }
+
+  /**
+   * Selector maps a logical model name to a runtime Model instance.
+   */
+  export type Selector = (modelName: string) => Model;
 }
 
 // ============================================================================
@@ -130,10 +138,10 @@ export namespace Provider {
   }
 
   /**
-   * Factory is a function that returns a Model.Selector when given
-   * runtime args.
+   * Factory is a function that returns a function that returns a LanguageModel
+   * when given runtime args.
    */
-  export type Factory = (args: FactoryArgs) => Model.Selector;
+  export type Factory = (args: FactoryArgs) => (name: string) => LanguageModel;
 
   /**
    * Parse provider and model name from a string like
@@ -214,22 +222,15 @@ export namespace Provider {
     // Get the arguments that we need to pass to initialise the provider.
     const args = buildFactoryArgs(provider, merged, override);
 
-    return providerFactory(args);
-  }
+    // Generate a lambda that will select the model (including the info) based
+    // on the modelName.
+    const modelFunc = (modelName: string) =>
+      new Model.Model(
+        providerFactory(args)(modelName),
+        merged.models[modelName],
+      );
 
-  /**
-   * Get cost information for a specific model.
-   */
-  export async function getModelCost(
-    provider: string,
-    modelName: string,
-    log?: Log,
-  ): Promise<Model.Cost | undefined> {
-    const manifest = await resolveManifest(provider, log);
-    if (!manifest?.models) return undefined;
-
-    const modelInfo = manifest.models[modelName];
-    return modelInfo?.cost;
+    return modelFunc;
   }
 
   /**

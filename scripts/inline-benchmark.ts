@@ -191,8 +191,7 @@ async function runSingleBenchmark(opts: {
   testCase: TestCase;
   runNum: number;
   totalRuns: number;
-  languageModel: LanguageModel;
-  modelCost: Model.Cost | undefined;
+  model: Model.Model;
   preview: boolean;
   critic: boolean;
   criticModel: string;
@@ -203,8 +202,7 @@ async function runSingleBenchmark(opts: {
     testCase,
     runNum,
     totalRuns,
-    languageModel,
-    modelCost,
+    model,
     preview,
     critic,
     criticModel,
@@ -219,7 +217,7 @@ async function runSingleBenchmark(opts: {
   try {
     const result = await generateCompletion({
       approach,
-      model: languageModel,
+      model: model.model,
       testCase,
       modelName,
     });
@@ -241,7 +239,9 @@ async function runSingleBenchmark(opts: {
     );
 
     // Calculate cost from token usage
-    const cost = tokenUsage ? calculateCost(tokenUsage, modelCost) : null;
+    const cost = tokenUsage
+      ? calculateCost(tokenUsage, model.info?.cost)
+      : null;
     const metrics = tokenUsage && cost ? { ...tokenUsage, ...cost } : undefined;
     if (metrics) {
       const { input, output, cost } = metrics;
@@ -317,7 +317,6 @@ async function runApproachBenchmark(opts: {
   testCases: TestCase[];
   runs: number;
   concurrency: number;
-  modelCost: Model.Cost | undefined;
   preview: boolean;
   critic: boolean;
   criticModel: string;
@@ -328,7 +327,6 @@ async function runApproachBenchmark(opts: {
     testCases,
     runs,
     concurrency,
-    modelCost,
     preview,
     critic,
     criticModel,
@@ -345,7 +343,7 @@ async function runApproachBenchmark(opts: {
     provider,
     log: NOOP_LOG,
   });
-  const languageModel = factory(modelName);
+  const model = factory(modelName);
 
   await runConcurrent(runs * testCases.length, concurrency, async idx => {
     const testCaseIdx = idx % testCases.length;
@@ -358,8 +356,7 @@ async function runApproachBenchmark(opts: {
         testCase: currentTestCase,
         runNum,
         totalRuns: runs,
-        languageModel,
-        modelCost,
+        model,
         preview,
         critic,
         criticModel,
@@ -587,17 +584,6 @@ async function main(): Promise<void> {
     console.log(`Model: ${modelStr}`);
     console.log(`${'='.repeat(60)}`);
 
-    const { provider, modelName } = Provider.parseModelString(modelStr);
-
-    const modelCost = await Provider.getModelCost(provider, modelName);
-
-    if (!modelCost) {
-      console.warn(
-        `Warning: No cost data found for ${modelStr}. ` +
-          'Cost calculations will be unavailable.',
-      );
-    }
-
     const summaries: ApproachSummary[] = [];
     const resultsMap = new Map<ApproachType, RunMetrics[]>();
 
@@ -609,7 +595,6 @@ async function main(): Promise<void> {
           testCases,
           runs: opts.runs,
           concurrency: opts.concurrency,
-          modelCost,
           preview: opts.preview,
           critic: opts.critic,
           criticModel: opts.criticModel,

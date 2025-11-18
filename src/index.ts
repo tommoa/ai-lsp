@@ -12,7 +12,6 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocuments } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { type LanguageModel } from 'ai';
 import { Provider, Model } from './provider';
 import { InlineCompletion } from './inline-completion';
 import { NextEdit } from './next-edit';
@@ -74,13 +73,13 @@ interface InitOptions {
 
 // Mode-specific runtime configuration after initialization.
 interface NextEditConfig {
-  model: LanguageModel;
+  model: Model.Model;
   modelId: string;
   prompt: NextEdit.PromptType;
 }
 
 interface InlineCompletionConfig {
-  model: LanguageModel;
+  model: Model.Model;
   modelId: string;
   prompt: InlineCompletion.PromptType;
   fimFormat?: FimTemplate;
@@ -124,7 +123,7 @@ const log: Log = (
 type ProviderInitResult = {
   factory: Model.Selector;
   provider: string;
-  model: LanguageModel;
+  model: Model.Model;
   modelId: string;
 };
 
@@ -320,7 +319,7 @@ connection.onCompletion(
     let result;
     try {
       result = await InlineCompletion.generate({
-        model: INLINE_COMPLETION_CONFIG.model,
+        model: INLINE_COMPLETION_CONFIG.model.model,
         document: doc,
         position: pos,
         log,
@@ -421,7 +420,7 @@ connection.onRequest(
 
     try {
       const result = await NextEdit.generate({
-        model: NEXT_EDIT_CONFIG.model,
+        model: NEXT_EDIT_CONFIG.model.model,
         document: doc,
         prompt: NEXT_EDIT_CONFIG.prompt,
         log,

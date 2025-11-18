@@ -250,7 +250,7 @@ export async function rateChange(
 
     const messages: ModelMessage[] = [{ role: 'user', content: promptText }];
     const res = await generateText({
-      model: criticModelObj,
+      model: criticModelObj.model,
       messages,
     });
     const criticRaw = (res as any)?.text ?? String(res ?? '');
