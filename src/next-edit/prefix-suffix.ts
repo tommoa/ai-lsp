@@ -60,26 +60,6 @@ export namespace PrefixSuffix {
   };
 
   /**
-   * Find all (possibly overlapping) occurrences of `needle` in `hay`.
-   *
-   * Returns start indices for each match. Overlapping matches are allowed
-   * (e.g. "ana" in "banana" yields [1, 3]). Empty `needle` returns [] to
-   * avoid ambiguous behavior.
-   */
-  function findAllOccurrences(hay: string, needle: string): number[] {
-    const res: number[] = [];
-    if (needle.length === 0) return res;
-    let idx = 0;
-    while (true) {
-      const found = hay.indexOf(needle, idx);
-      if (found === -1) break;
-      res.push(found);
-      idx = found + 1; // allow overlapping occurrences
-    }
-    return res;
-  }
-
-  /**
    * Parse raw LLM output into an array of normalized `LLMHint` objects.
    *
    * The function attempts to parse `raw` as JSON first. If that fails it
@@ -175,64 +155,17 @@ export namespace PrefixSuffix {
 
     log?.('debug', `convertLLMHintsToEdits docLen=${doc.length}`);
 
-    // Detect original newline sequence so we can map normalized hints back.
-    const docNewline = rawDoc.includes('\r\n') ? '\r\n' : '\n';
-
     const edits: LspEdit[] = [];
 
     for (const hint of hints) {
-      // Reintroduce the document's newline style into the hint parts so
-      // string matching aligns with the document's offsets.
-      const hPrefix = hint.prefix.replace(/\n/g, docNewline);
-      const hExisting = hint.existing.replace(/\n/g, docNewline);
-      const hSuffix = hint.suffix.replace(/\n/g, docNewline);
-
-      const joined = hPrefix + hExisting + hSuffix;
+      // Try to find the the original prefix + existing + suffix position in the
+      // document.
+      const joined = hint.prefix + hint.existing + hint.suffix;
       const exactIndex = doc.indexOf(joined);
 
-      let startIndex: number | null = null;
-      let endIndex: number | null = null;
-      let matchedBy: string | null = null;
-
-      if (exactIndex !== -1) {
-        // Exact anchor matched.
-        startIndex = exactIndex + hPrefix.length;
-        endIndex = startIndex + hExisting.length;
-        matchedBy = 'exact';
-      } else {
-        // Try prefix-based heuristics and fallbacks.
-        const prefixOcc = findAllOccurrences(doc, hPrefix);
-        if (prefixOcc.length === 1) {
-          const p = prefixOcc[0] as number;
-          const possibleStart = p + hPrefix.length;
-          const possibleExisting = doc.slice(
-            possibleStart,
-            possibleStart + hExisting.length,
-          );
-          if (possibleExisting === hExisting) {
-            startIndex = possibleStart;
-            endIndex = startIndex + hExisting.length;
-            matchedBy = 'uniquePrefix';
-          }
-        } else if (hExisting.length === 0 && prefixOcc.length > 0) {
-          // Insertion: place at first prefix occurrence.
-          const p = prefixOcc[0] as number;
-          startIndex = p + hPrefix.length;
-          endIndex = startIndex;
-          matchedBy = 'insertion';
-        } else if (hExisting.length > 0) {
-          // Use unique `existing` as a last resort.
-          const existingOcc = findAllOccurrences(doc, hExisting);
-          if (existingOcc.length === 1) {
-            startIndex = existingOcc[0] as number;
-            endIndex = startIndex + hExisting.length;
-            matchedBy = 'uniqueExisting';
-          }
-        }
-      }
-
-      if (startIndex === null || endIndex === null) {
-        // Conservative: skip unresolved or ambiguous hints.
+      if (exactIndex === -1) {
+        // We didn't find what the AI has returned to us. We should log that it
+        // didn't give us the correct format, and return an empty hint.
         log?.(
           'warn',
           `Skipping unresolved hint uri=${uri} hint=${clip(
@@ -241,6 +174,9 @@ export namespace PrefixSuffix {
         );
         continue;
       }
+      // Exact anchor matched.
+      const startIndex = exactIndex + hint.prefix.length;
+      const endIndex = startIndex + hint.existing.length;
 
       // Use document.positionAt so positions are consistent with the doc.
       const range: Range = {
@@ -254,8 +190,6 @@ export namespace PrefixSuffix {
         text: hint.text,
         reason: hint.reason,
       });
-
-      log?.('debug', `Applied hint via=${matchedBy} uri=${uri}`);
     }
 
     log?.('info', `convertLLMHintsToEdits produced=${edits.length}`);

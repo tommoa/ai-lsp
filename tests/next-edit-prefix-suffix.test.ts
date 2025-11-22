@@ -82,7 +82,7 @@ describe('PrefixSuffix', () => {
 
   describe('convertLLMHintsToEdits - edge cases', () => {
     it('should handle insertion with empty existing field', () => {
-      const docText = 'const x = 5;';
+      const docText = 'const x = ;';
       const doc = TextDocument.create(
         'file:///test.ts',
         'typescript',
@@ -120,7 +120,7 @@ describe('PrefixSuffix', () => {
       const hints: PrefixSuffix.LLMHint[] = [
         {
           prefix: 'x = ',
-          existing: '',
+          existing: '1',
           suffix: ';',
           text: '100',
           reason: 'insert at first x',
@@ -133,33 +133,6 @@ describe('PrefixSuffix', () => {
       });
       expect(edits).toHaveLength(1);
       expect(edits[0]!.text).toBe('100');
-    });
-
-    it('should use uniqueExisting fallback when prefix ambiguous', () => {
-      const docText = 'x = 1;\ny = 2;\nx = 3;';
-      const doc = TextDocument.create(
-        'file:///test.js',
-        'javascript',
-        1,
-        docText,
-      );
-
-      const hints: PrefixSuffix.LLMHint[] = [
-        {
-          prefix: 'x = ',
-          existing: '2',
-          suffix: ';',
-          text: '42',
-          reason: 'update',
-        },
-      ];
-
-      const edits = PrefixSuffix.convertLLMHintsToEdits({
-        document: doc,
-        hints,
-      });
-      expect(edits).toHaveLength(1);
-      expect(edits[0]!.text).toBe('42');
     });
 
     it('should skip unresolved hints', () => {
@@ -186,28 +159,6 @@ describe('PrefixSuffix', () => {
         hints,
       });
       expect(edits).toHaveLength(0);
-    });
-
-    it('should handle CRLF newlines correctly', () => {
-      const docText = 'line1\r\nline2\r\nline3';
-      const doc = TextDocument.create('file:///test.txt', 'text', 1, docText);
-
-      const hints: PrefixSuffix.LLMHint[] = [
-        {
-          prefix: 'line1\n',
-          existing: 'line2',
-          suffix: '\nline3',
-          text: 'modified',
-          reason: 'update',
-        },
-      ];
-
-      const edits = PrefixSuffix.convertLLMHintsToEdits({
-        document: doc,
-        hints,
-      });
-      expect(edits).toHaveLength(1);
-      expect(edits[0]!.text).toBe('modified');
     });
 
     it('should handle exact anchor match', () => {
