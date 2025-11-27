@@ -14,7 +14,11 @@
 
 import { generateText } from 'ai';
 import { time, extractTokenUsage, cleanFimResponse } from '../util';
-import { buildFimPrompt, type FimTemplate } from './fim-formats';
+import {
+  buildFimPrompt,
+  type FimTemplate,
+  type FimContext,
+} from './fim-formats';
 import { UnsupportedPromptError } from './errors';
 import { Completion, Result, GenerateOptions } from './types';
 
@@ -30,6 +34,10 @@ export namespace FIM {
      * FIM completions are typically shorter than chat (50-256 tokens).
      */
     maxTokens?: number;
+    /**
+     * Workspace root URI for extracting repository context (optional).
+     */
+    workspaceRootUri?: string | null;
   }
 
   /**
@@ -47,7 +55,15 @@ export namespace FIM {
    * @throws UnsupportedPromptError if the model doesn't support FIM
    */
   export async function generate(opts: Options): Promise<Result> {
-    const { model, document, position, log, fimFormat, maxTokens = 256 } = opts;
+    const {
+      model,
+      document,
+      position,
+      log,
+      fimFormat,
+      maxTokens = 256,
+      workspaceRootUri,
+    } = opts;
 
     using _ = time(log, 'info', 'InlineCompletion.FIM.generate');
 
@@ -57,13 +73,32 @@ export namespace FIM {
     const textBefore = docText.slice(0, offset);
     const textAfter = docText.slice(offset);
 
+    // Extract file path from document URI
+    const documentUri = position.textDocument.uri;
+    const filePath = documentUri.startsWith('file://')
+      ? decodeURIComponent(documentUri.slice(7))
+      : documentUri;
+
+    // Extract repo name from workspace root
+    let repoName = 'unknown';
+    if (workspaceRootUri) {
+      const rootPath = workspaceRootUri.startsWith('file://')
+        ? decodeURIComponent(workspaceRootUri.slice(7))
+        : workspaceRootUri;
+      const segments = rootPath.split('/').filter(Boolean);
+      repoName = segments[segments.length - 1] || 'unknown';
+    }
+
     log('debug', `FIM format: ${fimFormat.name || 'custom'}`);
 
-    // Build FIM prompt with template
-    const prompt = buildFimPrompt(fimFormat, {
+    // Build FIM prompt with template and typed context
+    const context: FimContext = {
       prefix: textBefore,
       suffix: textAfter,
-    });
+      repo_name: repoName,
+      file_path: filePath,
+    };
+    const prompt = buildFimPrompt(fimFormat, context);
     const stopSequences = fimFormat.stop;
 
     log('debug', `FIM prompt length: ${prompt.length}`);

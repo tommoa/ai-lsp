@@ -95,7 +95,7 @@ export function autoDetectFimTemplate(modelName: string): FimTemplate {
   const modelLower = modelName.toLowerCase();
 
   // Model name patterns checked in order, first match wins
-  const patterns = ['codellama', 'deepseek', 'qwen'];
+  const patterns = Object.keys(BUILTIN_FIM_TEMPLATES);
 
   for (const pattern of patterns) {
     if (modelLower.includes(pattern)) {

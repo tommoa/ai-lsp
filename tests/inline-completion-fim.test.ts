@@ -46,6 +46,7 @@ describe('FIM.generate', () => {
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
         maxTokens: 256,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
@@ -73,6 +74,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['codellama']!,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.tokenUsage).toBeDefined();
@@ -99,6 +101,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
@@ -127,6 +130,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).toBeEmpty();
@@ -147,6 +151,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['codellama']!,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).toBeEmpty();
@@ -172,6 +177,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
@@ -198,6 +204,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).toBeEmpty();
@@ -238,6 +245,7 @@ describe('FIM.generate', () => {
           position,
           fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
           log: NOOP_LOG,
+          workspaceRootUri: 'file:///test/workspace',
         });
         expect.unreachable('Should have thrown UnsupportedPromptError');
       } catch (err) {
@@ -280,6 +288,7 @@ describe('FIM.generate', () => {
           position,
           fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
           log: NOOP_LOG,
+          workspaceRootUri: 'file:///test/workspace',
         });
         expect.unreachable('Should have thrown error');
       } catch (err) {
@@ -316,6 +325,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: customTemplate,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
@@ -346,6 +356,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: customTemplate,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
@@ -374,6 +385,7 @@ describe('FIM.generate', () => {
         position,
         log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
+        workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
@@ -413,6 +425,7 @@ describe('FIM.generate', () => {
           position,
           log: NOOP_LOG,
           fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+          workspaceRootUri: 'file:///test/workspace',
         });
         expect.unreachable('Should have thrown UnsupportedPromptError');
       } catch (err) {

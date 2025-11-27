@@ -193,7 +193,7 @@ export class LSPTestClient {
     // Send initialize request
     const initParams: InitializeParams = {
       processId: process.pid,
-      rootUri: null,
+      rootUri: 'file:///test/workspace',
       capabilities: {
         textDocument: {
           completion: {

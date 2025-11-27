@@ -51,6 +51,7 @@ function resolveFimTemplate(
 // representation for `generateText`). Can be replaced during init.
 let provider: Model.Selector = (model: string) => model as any;
 let SELECTED_MODEL: string | undefined = undefined;
+let WORKSPACE_ROOT_URI: string | null = null;
 
 // Mode-specific configuration.
 interface NextEditModeConfig {
@@ -239,6 +240,7 @@ async function initModeConfigs(
 
 connection.onInitialize(async (params: InitializeParams) => {
   log('info', 'LSP Server initializing...');
+  WORKSPACE_ROOT_URI = params.rootUri;
   const initOpts = params.initializationOptions || ({} as InitOptions);
 
   const result = await (async () => {
@@ -324,6 +326,7 @@ connection.onCompletion(
         ...(prompt === 'fim' && {
           fimFormat: INLINE_COMPLETION_CONFIG.fimFormat!,
           maxTokens: 256,
+          workspaceRootUri: WORKSPACE_ROOT_URI,
         }),
       } as InlineCompletion.Options);
     } catch (err) {
