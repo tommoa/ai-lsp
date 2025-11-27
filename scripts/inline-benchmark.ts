@@ -166,24 +166,17 @@ async function generateCompletion(opts: {
     position: document.positionAt(offset),
   };
 
-  // Map approach directly to PromptType (same string values)
-  const promptType =
-    approach === 'fim'
-      ? InlineCompletion.PromptType.FIM
-      : InlineCompletion.PromptType.Chat;
-
-  const generateOpts: InlineCompletion.GenerateOptions = {
+  return await InlineCompletion.generate({
     model,
     document,
     position,
     log: NOOP_LOG,
-    prompt: promptType,
+    prompt: approach,
     ...(approach === 'fim' && {
       fimFormat: autoDetectFimTemplate(modelName),
+      maxTokens: 256,
     }),
-  };
-
-  return await InlineCompletion.generate(generateOpts);
+  } as InlineCompletion.Options);
 }
 
 async function runSingleBenchmark(opts: {

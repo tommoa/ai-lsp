@@ -12,35 +12,15 @@
  * 4. Returns raw completion text (no JSON parsing needed)
  */
 
-import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
-import { type TextDocument } from 'vscode-languageserver-textdocument';
-import { generateText, type LanguageModel } from 'ai';
-import {
-  Log,
-  time,
-  type TokenUsage,
-  extractTokenUsage,
-  cleanFimResponse,
-} from '../util';
+import { generateText } from 'ai';
+import { time, extractTokenUsage, cleanFimResponse } from '../util';
 import { buildFimPrompt, type FimTemplate } from './fim-formats';
 import { UnsupportedPromptError } from './errors';
+import { Completion, Result, GenerateOptions } from './types';
 
 export namespace FIM {
-  export type Completion = {
-    text: string;
-    reason?: string;
-  };
-
-  export type Result = {
-    completions: Completion[] | null;
-    tokenUsage?: TokenUsage;
-  };
-
-  export interface GenerateOptions {
-    model: LanguageModel;
-    document: TextDocument;
-    position: TextDocumentPositionParams;
-    log?: Log;
+  export interface Options extends GenerateOptions {
+    prompt: 'fim';
     /**
      * FIM template to use for prompt construction (required).
      */
@@ -63,15 +43,13 @@ export namespace FIM {
    * The model returns raw completion text which is wrapped in a result object.
    *
    * @param opts - Generation options
-   * @returns Result with completions or null if generation fails
+   * @returns Result with completions array (empty if generation fails)
    * @throws UnsupportedPromptError if the model doesn't support FIM
    */
-  export async function generate(opts: GenerateOptions): Promise<Result> {
+  export async function generate(opts: Options): Promise<Result> {
     const { model, document, position, log, fimFormat, maxTokens = 256 } = opts;
 
-    using _ = log
-      ? time(log, 'info', 'InlineCompletion.FIM.generate')
-      : undefined;
+    using _ = time(log, 'info', 'InlineCompletion.FIM.generate');
 
     // Extract prefix and suffix from document
     const docText = document.getText();
@@ -79,7 +57,7 @@ export namespace FIM {
     const textBefore = docText.slice(0, offset);
     const textAfter = docText.slice(offset);
 
-    log?.('debug', `FIM format: ${fimFormat.name || 'custom'}`);
+    log('debug', `FIM format: ${fimFormat.name || 'custom'}`);
 
     // Build FIM prompt with template
     const prompt = buildFimPrompt(fimFormat, {
@@ -88,8 +66,8 @@ export namespace FIM {
     });
     const stopSequences = fimFormat.stop;
 
-    log?.('debug', `FIM prompt length: ${prompt.length}`);
-    log?.('debug', `FIM stop sequences: ${JSON.stringify(stopSequences)}`);
+    log('debug', `FIM prompt length: ${prompt.length}`);
+    log('debug', `FIM stop sequences: ${JSON.stringify(stopSequences)}`);
 
     try {
       const res = await generateText({
@@ -108,8 +86,8 @@ export namespace FIM {
       completionText = cleanFimResponse(completionText, textBefore);
 
       if (!completionText || completionText.trim().length === 0) {
-        log?.('info', 'FIM: empty completion');
-        return { completions: null, tokenUsage };
+        log('info', 'FIM: empty completion');
+        return { completions: [], tokenUsage };
       }
 
       // FIM returns raw text, wrap in completion object
@@ -120,7 +98,7 @@ export namespace FIM {
         },
       ];
 
-      log?.('info', `FIM: generated ${completionText.length} chars`);
+      log('info', `FIM: generated ${completionText.length} chars`);
       return { completions, tokenUsage };
     } catch (err) {
       const errMsg = String(err);
@@ -134,7 +112,7 @@ export namespace FIM {
       }
 
       // Re-throw other errors as-is
-      log?.('error', 'FIM: text generation failed', {
+      log('error', 'FIM: text generation failed', {
         err: errMsg,
       });
       throw err;

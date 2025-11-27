@@ -39,13 +39,14 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions).toHaveLength(2);
       expect(result.completions![0]!.text).toBe('sum');
       expect(result.completions![0]!.reason).toBe('variable name');
@@ -57,6 +58,7 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
@@ -76,9 +78,11 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
+        log: NOOP_LOG,
       });
 
       expect(result.completions).toHaveLength(2);
@@ -101,6 +105,7 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
@@ -113,7 +118,7 @@ describe('Chat.generate', () => {
       expect(result.completions![1]!.text).toBe('also valid');
     });
 
-    it('should return null when all completions are invalid', async () => {
+    it('should return empty when all completions are invalid', async () => {
       const response = JSON.stringify([
         { text: null },
         { text: '' },
@@ -122,27 +127,29 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
 
-    it('should return null for empty array response', async () => {
+    it('should return empty array for empty array response', async () => {
       const response = JSON.stringify([]);
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
   });
 
@@ -152,13 +159,14 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
 
     it('should handle non-array JSON', async () => {
@@ -166,39 +174,42 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
 
     it('should handle empty response text', async () => {
       const model = createMockModel({ response: '' });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
 
     it('should handle model errors gracefully', async () => {
       const model = createMockModel({ throwError: true });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
       expect(result.tokenUsage).toBeUndefined();
     });
   });
@@ -220,12 +231,14 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response });
 
       const result = await Chat.generate({
+        prompt: 'chat',
         model,
         document: doc,
         position,
+        log: NOOP_LOG,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions![0]!.text).toBe('a + b');
     });
   });
@@ -242,18 +255,20 @@ describe('Chat.generate', () => {
         model,
         document: testDoc,
         position: testPosition,
-      });
-      expect(result1.completions).not.toBeNull();
+        log: NOOP_LOG,
+      } as any);
+      expect(result1.completions).not.toBeEmpty();
       expect(result1.completions?.[0]?.text).toBe('chat_completion');
 
       // Test explicit prompt="chat"
       const result2 = await InlineCompletion.generate({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
-        prompt: InlineCompletion.PromptType.Chat,
+        log: NOOP_LOG,
       });
-      expect(result2.completions).not.toBeNull();
+      expect(result2.completions).not.toBeEmpty();
       expect(result2.completions?.[0]?.text).toBe('chat_completion');
     });
   });

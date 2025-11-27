@@ -39,6 +39,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: ' sum' });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -47,7 +48,7 @@ describe('FIM.generate', () => {
         maxTokens: 256,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions![0]!.text).toBe(' sum');
       expect(result.completions![0]!.reason).toBe('fim');
     });
@@ -66,6 +67,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: 'pass' });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -91,6 +93,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: ' b;' });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -98,13 +101,13 @@ describe('FIM.generate', () => {
         fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions![0]!.text).toBe(' b;');
     });
   });
 
   describe('empty and edge case responses', () => {
-    it('should return null completions for empty response', async () => {
+    it('should return empty completions for empty response', async () => {
       const doc = TextDocument.create(
         'file:///test.ts',
         'typescript',
@@ -118,6 +121,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: mockResponses.empty() });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -125,10 +129,10 @@ describe('FIM.generate', () => {
         fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
 
-    it('should return null for whitespace-only response', async () => {
+    it('should return empty for whitespace-only response', async () => {
       const doc = TextDocument.create('file:///test.py', 'python', 1, 'x = y');
       const position: TextDocumentPositionParams = {
         textDocument: { uri: 'file:///test.py' },
@@ -137,6 +141,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: '   \n\t  ' });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -144,7 +149,7 @@ describe('FIM.generate', () => {
         fimFormat: BUILTIN_FIM_TEMPLATES['codellama']!,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
 
     it('should handle cursor at beginning of file', async () => {
@@ -161,6 +166,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: '// comment\n' });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -168,7 +174,7 @@ describe('FIM.generate', () => {
         fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions?.[0]!.text).toBe('// comment\n');
     });
 
@@ -186,6 +192,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: mockResponses.empty() });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -193,7 +200,7 @@ describe('FIM.generate', () => {
         fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
       });
 
-      expect(result.completions).toBeNull();
+      expect(result.completions).toBeEmpty();
     });
   });
 
@@ -225,10 +232,12 @@ describe('FIM.generate', () => {
 
       try {
         await FIM.generate({
+          prompt: 'fim',
           model: badModel,
           document: doc,
           position,
           fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+          log: NOOP_LOG,
         });
         expect.unreachable('Should have thrown UnsupportedPromptError');
       } catch (err) {
@@ -265,10 +274,12 @@ describe('FIM.generate', () => {
 
       try {
         await FIM.generate({
+          prompt: 'fim',
           model: errorModel,
           document: doc,
           position,
           fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+          log: NOOP_LOG,
         });
         expect.unreachable('Should have thrown error');
       } catch (err) {
@@ -299,6 +310,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: '"Hello, world!"' });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -306,7 +318,7 @@ describe('FIM.generate', () => {
         fimFormat: customTemplate,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions![0]!.text).toBe('"Hello, world!"');
     });
 
@@ -328,6 +340,7 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: '42' });
       const result = await FIM.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
@@ -335,7 +348,7 @@ describe('FIM.generate', () => {
         fimFormat: customTemplate,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions![0]!.text).toBe('42');
     });
   });
@@ -355,14 +368,15 @@ describe('FIM.generate', () => {
 
       const model = createMockModel({ response: ' fim_completion' });
       const result = await InlineCompletion.generate({
+        prompt: 'fim',
         model,
         document: doc,
         position,
-        prompt: InlineCompletion.PromptType.FIM,
+        log: NOOP_LOG,
         fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
       });
 
-      expect(result.completions).not.toBeNull();
+      expect(result.completions).not.toBeEmpty();
       expect(result.completions?.[0]?.text).toBe(' fim_completion');
     });
 
@@ -393,10 +407,11 @@ describe('FIM.generate', () => {
 
       try {
         await InlineCompletion.generate({
+          prompt: 'fim',
           model: badModel,
           document: doc,
           position,
-          prompt: InlineCompletion.PromptType.FIM,
+          log: NOOP_LOG,
           fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
         });
         expect.unreachable('Should have thrown UnsupportedPromptError');

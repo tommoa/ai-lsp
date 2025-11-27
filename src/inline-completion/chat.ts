@@ -6,38 +6,23 @@
  * but less token-efficient than FIM.
  */
 
-import { type TextDocumentPositionParams } from 'vscode-languageserver/node';
-import { type TextDocument } from 'vscode-languageserver-textdocument';
-import { generateText, type LanguageModel } from 'ai';
-import type { ModelMessage } from 'ai';
-import { Log, time, Parser, type TokenUsage, extractTokenUsage } from '../util';
+import { generateText, type ModelMessage } from 'ai';
+import { time, Parser, extractTokenUsage } from '../util';
+import { type Result, type Completion, GenerateOptions } from './types';
 
 import INLINE_COMPLETION_PROMPT from '../../prompt/inline-completion.txt';
 
 /**
  * Validate and normalize a completion object from LLM response
  */
-function validateCompletion(item: any): Chat.Completion | null {
+function validateCompletion(item: any): Completion | null {
   if (!item?.text || typeof item.text !== 'string') return null;
   return { text: item.text, reason: item.reason ?? '' };
 }
 
 export namespace Chat {
-  export type Completion = {
-    text: string;
-    reason?: string;
-  };
-
-  export type Result = {
-    completions: Completion[] | null;
-    tokenUsage?: TokenUsage;
-  };
-
-  export interface GenerateOptions {
-    model: LanguageModel;
-    document: TextDocument;
-    position: TextDocumentPositionParams;
-    log?: Log;
+  export interface Options extends GenerateOptions {
+    prompt: 'chat';
   }
 
   /**
@@ -52,13 +37,11 @@ export namespace Chat {
    * validated before returning to the caller.
    *
    * @param opts - Generation options including model, document, and position
-   * @returns Result with completions array or null if generation fails
+   * @returns Result with completions array (empty if generation fails)
    */
-  export async function generate(opts: GenerateOptions): Promise<Result> {
+  export async function generate(opts: Options): Promise<Result> {
     const { model, document, position, log } = opts;
-    using _ = log
-      ? time(log, 'info', 'InlineCompletion.Chat.generate')
-      : undefined;
+    using _ = time(log, 'info', 'InlineCompletion.Chat.generate');
 
     const docText = document.getText();
     const offset = document.offsetAt(position.position);
@@ -78,7 +61,7 @@ export namespace Chat {
       },
     ];
 
-    log?.('debug', JSON.stringify(messages));
+    log('debug', JSON.stringify(messages));
 
     try {
       const res = await generateText({
@@ -92,7 +75,7 @@ export namespace Chat {
       const tokenUsage = extractTokenUsage(res) ?? undefined;
 
       if (!text) {
-        return { completions: null, tokenUsage };
+        return { completions: [], tokenUsage };
       }
 
       // Parse the JSON response from the model
@@ -102,19 +85,19 @@ export namespace Chat {
         .filter((c): c is Completion => c !== null);
 
       if (normalized.length === 0) {
-        log?.(
+        log(
           'warn',
           'InlineCompletion.Chat: parsed array contained no valid items',
         );
-        return { completions: null, tokenUsage };
+        return { completions: [], tokenUsage };
       }
 
       return { completions: normalized, tokenUsage };
     } catch (err) {
-      log?.('error', 'InlineCompletion.Chat: text generation failed', {
+      log('error', 'InlineCompletion.Chat: text generation failed', {
         err: String(err),
       });
-      return { completions: null };
+      return { completions: [] };
     }
   }
 }

@@ -237,8 +237,9 @@ describe('Error Classification - InlineCompletion', () => {
       position: { line: 0, character: 13 },
     };
 
-    // InlineCompletion.generate should not throw - it returns null completions
+    // InlineCompletion.generate should not throw - it returns empty completions
     const result = await InlineCompletion.generate({
+      prompt: 'chat',
       model,
       document: doc,
       position,
@@ -246,8 +247,8 @@ describe('Error Classification - InlineCompletion', () => {
     });
 
     expect(result).toBeDefined();
-    // May have null completions on error
-    expect(result.completions === null || result.completions === undefined);
+    // May have empty completions on error
+    expect(result.completions).toBeArray();
   });
 
   /**
@@ -262,6 +263,7 @@ describe('Error Classification - InlineCompletion', () => {
     };
 
     const result = await InlineCompletion.generate({
+      prompt: 'chat',
       model,
       document: doc,
       position,
@@ -269,8 +271,8 @@ describe('Error Classification - InlineCompletion', () => {
     });
 
     expect(result).toBeDefined();
-    // Should return null completions, not crash
-    expect(result.completions === null || result.completions === undefined);
+    // Should return empty completions, not crash
+    expect(result.completions).toBeArray();
   });
 
   /**
@@ -285,6 +287,7 @@ describe('Error Classification - InlineCompletion', () => {
     };
 
     const result = await InlineCompletion.generate({
+      prompt: 'chat',
       model,
       document: doc,
       position,
@@ -474,6 +477,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
 
     // Should not throw
     const result1 = await InlineCompletion.generate({
+      prompt: 'chat',
       model: errorModel,
       document: doc,
       position,
@@ -485,6 +489,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
     // Should be able to run another completion
     const workingModel = createMockModel({ response: '[]' });
     const result2 = await InlineCompletion.generate({
+      prompt: 'chat',
       model: workingModel,
       document: doc,
       position,

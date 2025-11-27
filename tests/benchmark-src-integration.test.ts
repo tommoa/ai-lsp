@@ -252,6 +252,7 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
     };
 
     const result = await InlineCompletion.generate({
+      prompt: 'chat',
       model,
       document: doc,
       position,
@@ -285,13 +286,14 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
     };
 
     const result = await InlineCompletion.generate({
+      prompt: 'chat',
       model,
       document: doc,
       position,
       log: NOOP_LOG,
     });
 
-    // Should return null completions, not throw
+    // Should return empty completions, not throw
     expect(result).toBeDefined();
   });
 });

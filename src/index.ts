@@ -60,7 +60,7 @@ interface NextEditModeConfig {
 
 interface InlineCompletionModeConfig {
   model?: string;
-  prompt?: InlineCompletion.PromptType;
+  prompt?: InlineCompletion.Options['prompt'];
   fim_format?: string | FimTemplate;
 }
 
@@ -81,7 +81,7 @@ interface NextEditConfig {
 interface InlineCompletionConfig {
   model: Model.Model;
   modelId: string;
-  prompt: InlineCompletion.PromptType;
+  prompt: InlineCompletion.Options['prompt'];
   fimFormat?: FimTemplate;
 }
 
@@ -196,21 +196,15 @@ async function initModeConfigs(
   // Initialize inline-completion config
   const inlineCompletionOpts = initOpts.inline_completion || {};
   const inlineCompletionModelId = inlineCompletionOpts.model || globalModelId;
-  const inlineCompletionPrompt =
-    inlineCompletionOpts.prompt || InlineCompletion.PromptType.Chat;
+  const inlineCompletionPrompt = inlineCompletionOpts.prompt || 'chat';
+
+  type InlinePrompt = InlineCompletion.Options['prompt'];
 
   // Validate inline_completion.prompt
-  let validatedInlinePrompt = InlineCompletion.PromptType.Chat;
-  const inlineCompletionPromptValues = Object.values(
-    InlineCompletion.PromptType,
-  );
-  if (
-    inlineCompletionPromptValues.includes(
-      inlineCompletionPrompt as InlineCompletion.PromptType,
-    )
-  ) {
-    validatedInlinePrompt =
-      inlineCompletionPrompt as InlineCompletion.PromptType;
+  let validatedInlinePrompt: InlinePrompt = 'chat';
+  const inlineCompletionPromptValues: InlinePrompt[] = ['chat', 'fim'];
+  if (inlineCompletionPromptValues.includes(inlineCompletionPrompt)) {
+    validatedInlinePrompt = inlineCompletionPrompt as InlinePrompt;
   } else {
     log(
       'warn',
@@ -221,7 +215,7 @@ async function initModeConfigs(
 
   // Resolve FIM template (only if prompt is 'fim')
   let fimFormat: FimTemplate | undefined;
-  if (validatedInlinePrompt === InlineCompletion.PromptType.FIM) {
+  if (validatedInlinePrompt === 'fim') {
     fimFormat = resolveFimTemplate(
       inlineCompletionOpts.fim_format,
       inlineCompletionModelId,
@@ -232,7 +226,7 @@ async function initModeConfigs(
   INLINE_COMPLETION_CONFIG = {
     model: globalProvider(inlineCompletionModelId),
     modelId: inlineCompletionModelId,
-    prompt: validatedInlinePrompt,
+    prompt: validatedInlinePrompt as InlineCompletion.Options['prompt'],
     fimFormat,
   };
 
@@ -318,14 +312,20 @@ connection.onCompletion(
     const doc = documents.get(pos.textDocument.uri)!;
     let result;
     try {
+      const prompt =
+        INLINE_COMPLETION_CONFIG.prompt as InlineCompletion.Options['prompt'];
+
       result = await InlineCompletion.generate({
         model: INLINE_COMPLETION_CONFIG.model.model,
         document: doc,
         position: pos,
         log,
-        prompt: INLINE_COMPLETION_CONFIG.prompt as InlineCompletion.PromptType,
-        fimFormat: INLINE_COMPLETION_CONFIG.fimFormat,
-      });
+        prompt,
+        ...(prompt === 'fim' && {
+          fimFormat: INLINE_COMPLETION_CONFIG.fimFormat!,
+          maxTokens: 256,
+        }),
+      } as InlineCompletion.Options);
     } catch (err) {
       log('error', `InlineCompletion.generate failed: ${String(err)}`);
       throw err;
