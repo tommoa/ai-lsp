@@ -5,9 +5,9 @@
  * language model and converting them to precise LSP-style text edits. It
  * supports multiple prompt strategies:
  *
- * - "prefix_suffix": Compact hints with prefix/suffix anchoring. Use when you
+ * - "prefix-suffix": Compact hints with prefix/suffix anchoring. Use when you
  *   want precise, localized edits with minimal context overhead.
- * - "line_number": Line-numbered file content. Use when you want the model to
+ * - "line-number": Line-numbered file content. Use when you want the model to
  *   have better overall context or when prefix/suffix anchoring is unreliable.
  *
  * Public API
@@ -22,41 +22,16 @@
  *   mapped uniquely to a document location are skipped to avoid unsafe edits.
  */
 
-import { type LanguageModel } from 'ai';
-import { Log, time, type TokenUsage } from './util';
+import { time } from './util';
 import { PrefixSuffix } from './next-edit/prefix-suffix';
 import { LineNumber } from './next-edit/line-number';
-import type { TextDocument } from 'vscode-languageserver-textdocument';
+import { LspEdit as _LspEdit, Result as _Result } from './next-edit/types';
 
 export namespace NextEdit {
-  /**
-   * Enum for next-edit prompt types
-   */
-  export enum PromptType {
-    PrefixSuffix = 'prefix_suffix',
-    LineNumber = 'line_number',
-  }
+  export type LspEdit = _LspEdit;
+  export type Result = _Result;
 
-  /**
-   * LSP-style edit. Both implementations produce this shape.
-   */
-  export type LspEdit = {
-    range: {
-      start: { line: number; character: number };
-      end: { line: number; character: number };
-    };
-    textDocument: { uri: string };
-    text: string;
-    reason?: string;
-  };
-
-  /**
-   * Result type that includes edits and optional token usage.
-   */
-  export type Result = {
-    edits: LspEdit[];
-    tokenUsage?: TokenUsage;
-  };
+  export type Options = PrefixSuffix.Options | LineNumber.Options;
 
   /**
    * Unified generate function: request edit hints from a language model using
@@ -64,31 +39,28 @@ export namespace NextEdit {
    *
    * @param opts.model - prepared LanguageModel instance
    * @param opts.document - TextDocument to base hints on
-   * @param opts.prompt - strategy: "prefix_suffix" (default) or "line_number"
+   * @param opts.prompt - strategy: "prefix-suffix" (default) or "line-number"
    * @param opts.log - optional logger for diagnostics/timing
    * @returns object with edits and optional token usage
    */
-  export async function generate(opts: {
-    model: LanguageModel;
-    document: TextDocument;
-    prompt?: PromptType;
-    log?: Log;
-  }): Promise<Result> {
+  export async function generate(opts: Options): Promise<Result> {
     const { model, document, log } = opts;
-    const prompt = opts.prompt ?? 'prefix_suffix';
+    const prompt = opts.prompt ?? 'prefix-suffix';
 
     using _timer = log
       ? time(log, 'info', `next-edit.generate (${prompt})`)
       : undefined;
 
-    if (prompt === 'line_number') {
+    if (prompt === 'line-number') {
       return await LineNumber.generate({
+        prompt: 'line-number',
         model,
         document,
         log,
       });
     } else {
       return await PrefixSuffix.generate({
+        prompt: 'prefix-suffix',
         model,
         document,
         log,

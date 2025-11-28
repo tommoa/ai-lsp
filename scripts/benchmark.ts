@@ -25,7 +25,7 @@ import {
 } from './benchmark-utils';
 import { NOOP_LOG, type TokenUsage } from '../src/util';
 
-type ApproachType = 'prefix_suffix' | 'line_number';
+type ApproachType = 'prefix-suffix' | 'line-number';
 
 interface RunMetrics {
   parseSuccess: boolean;
@@ -54,7 +54,7 @@ interface BenchmarkOptions {
 function usage(): void {
   console.log(
     'Usage: bun run scripts/benchmark.ts --file <path> --models <m1,m2> ' +
-      '[--approach prefix_suffix|line_number|both] ' +
+      '[--approach prefix-suffix|line-number|both] ' +
       '[--runs N] [--concurrency N] [--preview] [--context N] [--no-color] ' +
       '[--critic] [--critic-model <provider/model>] [--export-json <path>]',
   );
@@ -90,7 +90,7 @@ function parseArgs(): BenchmarkOptions {
 
   let approaches: ApproachType[] = [];
   try {
-    const validApproaches = ['prefix_suffix', 'line_number'] as const;
+    const validApproaches = ['prefix-suffix', 'line-number'] as const;
     const normalized = approach === 'both' ? 'all' : approach;
     approaches = parseApproachArg(
       normalized,
@@ -206,9 +206,7 @@ async function runApproachBenchmark(opts: {
 
       try {
         const promptType =
-          approach === 'prefix_suffix'
-            ? NextEdit.PromptType.PrefixSuffix
-            : NextEdit.PromptType.LineNumber;
+          approach === 'prefix-suffix' ? 'prefix-suffix' : 'line-number';
         const result = await NextEdit.generate({
           model: model.model,
           document: docObj,

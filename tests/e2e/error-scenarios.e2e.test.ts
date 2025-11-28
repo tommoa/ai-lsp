@@ -114,7 +114,7 @@ describe('E2E: Error Scenarios', () => {
         },
         model: 'mock/test-model',
         next_edit: {
-          prompt: 'prefix_suffix',
+          prompt: 'prefix-suffix',
         },
       },
     });

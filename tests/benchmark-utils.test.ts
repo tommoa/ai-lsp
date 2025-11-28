@@ -101,19 +101,19 @@ describe('Benchmark Utilities - Calculations', () => {
 describe('Benchmark Utilities - Parsing', () => {
   describe('parseApproachArg function', () => {
     it('should return all approaches for "all"', () => {
-      const validApproaches = ['prefix_suffix', 'line_number'] as const;
+      const validApproaches = ['prefix-suffix', 'line-number'] as const;
       const result = parseApproachArg('all', validApproaches);
-      expect(result).toEqual(['prefix_suffix', 'line_number']);
+      expect(result).toEqual(['prefix-suffix', 'line-number']);
     });
 
     it('should return only the approach selected', () => {
-      const validApproaches = ['prefix_suffix', 'line_number'] as const;
-      const result = parseApproachArg('prefix_suffix', validApproaches);
-      expect(result).toEqual(['prefix_suffix']);
+      const validApproaches = ['prefix-suffix', 'line-number'] as const;
+      const result = parseApproachArg('prefix-suffix', validApproaches);
+      expect(result).toEqual(['prefix-suffix']);
     });
 
     it('should throw error for invalid approach', () => {
-      const validApproaches = ['prefix_suffix', 'line_number'] as const;
+      const validApproaches = ['prefix-suffix', 'line-number'] as const;
       expect(() =>
         parseApproachArg('invalid_approach', validApproaches),
       ).toThrow();

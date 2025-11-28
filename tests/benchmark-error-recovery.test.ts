@@ -90,7 +90,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model,
         document: doc,
-        prompt: NextEdit.PromptType.PrefixSuffix,
+        prompt: 'prefix-suffix',
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -114,7 +114,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model,
         document: doc,
-        prompt: NextEdit.PromptType.PrefixSuffix,
+        prompt: 'prefix-suffix',
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -139,7 +139,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model,
         document: doc,
-        prompt: NextEdit.PromptType.PrefixSuffix,
+        prompt: 'prefix-suffix',
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -152,7 +152,7 @@ describe('Error Classification - NextEdit', () => {
   });
 
   /**
-   * PROTECTS AGAINST: Changes to prefix_suffix parsing that break error
+   * PROTECTS AGAINST: Changes to prefix-suffix parsing that break error
    * classification for conversion failures
    */
   it('should handle errors during edit conversion', async () => {
@@ -204,7 +204,7 @@ describe('Error Classification - NextEdit', () => {
       await NextEdit.generate({
         model: malformedPrefixSuffixModel,
         document: doc,
-        prompt: NextEdit.PromptType.PrefixSuffix,
+        prompt: 'prefix-suffix',
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -439,7 +439,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
       await NextEdit.generate({
         model: errorModel,
         document: doc,
-        prompt: NextEdit.PromptType.PrefixSuffix,
+        prompt: 'prefix-suffix',
         log: NOOP_LOG,
       });
     } catch {
@@ -453,7 +453,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
     const result = await NextEdit.generate({
       model: workingModel,
       document: doc,
-      prompt: NextEdit.PromptType.LineNumber,
+      prompt: 'line-number',
       log: NOOP_LOG,
     });
 

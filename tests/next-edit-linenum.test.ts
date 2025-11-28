@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { LineNumber } from '../src/next-edit/line-number';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { NOOP_LOG } from '../src/util';
 
 describe('LineNumber', () => {
   describe('parseLLMResponse', () => {
@@ -26,18 +27,18 @@ describe('LineNumber', () => {
       const raw = JSON.stringify([
         { startLine: 1, endLine: 1, text: 'line1\r\nline2', reason: 'test' },
       ]);
-      const hints = LineNumber.parseLLMResponse(raw, console.log);
+      const hints = LineNumber.parseLLMResponse(raw, NOOP_LOG);
       expect(hints[0]!.text).toBe('line1\nline2');
     });
 
     it('should throw on invalid hint shape', () => {
       const raw = JSON.stringify([{ startLine: 1 }]); // missing endLine, text
-      expect(() => LineNumber.parseLLMResponse(raw)).toThrow();
+      expect(() => LineNumber.parseLLMResponse(raw, NOOP_LOG)).toThrow();
     });
 
     it('should throw on non-object hint', () => {
       const raw = JSON.stringify([null]);
-      expect(() => LineNumber.parseLLMResponse(raw)).toThrow(
+      expect(() => LineNumber.parseLLMResponse(raw, NOOP_LOG)).toThrow(
         'Invalid hint shape',
       );
     });
@@ -46,7 +47,7 @@ describe('LineNumber', () => {
       const raw = JSON.stringify([
         { startLine: '1', endLine: 2, text: 'test' },
       ]);
-      expect(() => LineNumber.parseLLMResponse(raw)).toThrow(
+      expect(() => LineNumber.parseLLMResponse(raw, NOOP_LOG)).toThrow(
         'Invalid hint shape',
       );
     });
@@ -56,7 +57,7 @@ describe('LineNumber', () => {
         'Here is my suggestion: ' +
         JSON.stringify([{ startLine: 1, endLine: 1, text: 'new' }]) +
         ' This is good.';
-      const hints = LineNumber.parseLLMResponse(raw, console.log);
+      const hints = LineNumber.parseLLMResponse(raw, NOOP_LOG);
       expect(hints).toHaveLength(1);
       expect(hints[0]!.text).toBe('new');
     });
@@ -77,10 +78,13 @@ describe('LineNumber', () => {
         },
       ];
 
-      const edits = LineNumber.convertLLMHintsToEdits({
-        document: doc,
-        hints,
-      });
+      const edits = LineNumber.convertLLMHintsToEdits(
+        {
+          document: doc,
+          hints,
+        },
+        NOOP_LOG,
+      );
       expect(edits).toHaveLength(2);
       expect(edits[0]!.text).toBe('modified line 2');
       expect(edits[1]!.text).toBe('combined line');
@@ -96,10 +100,13 @@ describe('LineNumber', () => {
         { startLine: 2, endLine: 1, text: 'invalid range', reason: 'test' },
       ];
 
-      const edits = LineNumber.convertLLMHintsToEdits({
-        document: doc,
-        hints,
-      });
+      const edits = LineNumber.convertLLMHintsToEdits(
+        {
+          document: doc,
+          hints,
+        },
+        NOOP_LOG,
+      );
       expect(edits).toHaveLength(1);
       expect(edits[0]!.text).toBe('ok');
     });
@@ -112,10 +119,13 @@ describe('LineNumber', () => {
         { startLine: 1, endLine: 1, text: 'replaced', reason: 'test' },
       ];
 
-      const edits = LineNumber.convertLLMHintsToEdits({
-        document: doc,
-        hints,
-      });
+      const edits = LineNumber.convertLLMHintsToEdits(
+        {
+          document: doc,
+          hints,
+        },
+        NOOP_LOG,
+      );
       expect(edits).toHaveLength(1);
       expect(edits[0]!.text).toBe('replaced');
     });
@@ -128,10 +138,13 @@ describe('LineNumber', () => {
         { startLine: 1, endLine: 1, text: 'new', reason: 'fix typo' },
       ];
 
-      const edits = LineNumber.convertLLMHintsToEdits({
-        document: doc,
-        hints,
-      });
+      const edits = LineNumber.convertLLMHintsToEdits(
+        {
+          document: doc,
+          hints,
+        },
+        NOOP_LOG,
+      );
       expect(edits[0]!.reason).toBe('fix typo');
     });
   });

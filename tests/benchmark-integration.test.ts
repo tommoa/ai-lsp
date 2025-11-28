@@ -19,10 +19,10 @@ describe('Benchmark Integration - Export', () => {
     const exportPath = path.join(testOutputDir, 'results.json');
     const results = [
       {
-        key: 'model1:prefix_suffix',
+        key: 'model1:prefix-suffix',
         value: {
           modelName: 'model1',
-          approach: 'prefix_suffix',
+          approach: 'prefix-suffix',
           avgScore: 85.5,
           genAvgMs: 250,
           valid: 5,

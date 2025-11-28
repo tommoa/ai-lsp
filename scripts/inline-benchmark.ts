@@ -29,7 +29,7 @@ import {
 } from './benchmark-utils';
 import { NOOP_LOG, type TokenUsage } from '../src/util';
 
-// ApproachType is derived from InlineCompletion.PromptType
+// ApproachType is derived from the Options['prompt'];
 type ApproachType = 'chat' | 'fim';
 
 interface BenchmarkOptions {

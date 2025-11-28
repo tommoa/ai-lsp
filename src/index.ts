@@ -56,7 +56,7 @@ let WORKSPACE_ROOT_URI: string | null = null;
 // Mode-specific configuration.
 interface NextEditModeConfig {
   model?: string;
-  prompt?: NextEdit.PromptType;
+  prompt?: NextEdit.Options['prompt'];
 }
 
 interface InlineCompletionModeConfig {
@@ -76,7 +76,7 @@ interface InitOptions {
 interface NextEditConfig {
   model: Model.Model;
   modelId: string;
-  prompt: NextEdit.PromptType;
+  prompt: NextEdit.Options['prompt'];
 }
 
 interface InlineCompletionConfig {
@@ -170,14 +170,18 @@ async function initModeConfigs(
   // Initialize next-edit config
   const nextEditOpts = initOpts.next_edit || {};
   const nextEditModelId = nextEditOpts.model || globalModelId;
-  const nextEditPrompt =
-    nextEditOpts.prompt || NextEdit.PromptType.PrefixSuffix;
+  const nextEditPrompt = nextEditOpts.prompt || 'prefix-suffix';
+
+  type NextEditPrompt = NextEdit.Options['prompt'];
 
   // Validate next_edit.prompt
-  let validatedNextEditPrompt = NextEdit.PromptType.PrefixSuffix;
-  const nextEditPromptValues = Object.values(NextEdit.PromptType);
-  if (nextEditPromptValues.includes(nextEditPrompt as NextEdit.PromptType)) {
-    validatedNextEditPrompt = nextEditPrompt as NextEdit.PromptType;
+  let validatedNextEditPrompt: NextEditPrompt = 'prefix-suffix';
+  const nextEditPromptValues: NextEditPrompt[] = [
+    'prefix-suffix',
+    'line-number',
+  ];
+  if (nextEditPromptValues.includes(nextEditPrompt)) {
+    validatedNextEditPrompt = nextEditPrompt as NextEditPrompt;
   } else {
     log('warn', `Invalid next_edit.prompt: ${nextEditPrompt}, using default`);
   }

@@ -23,7 +23,7 @@ describe('E2E: Next Edit (copilotInlineEdit)', () => {
         },
         model: 'mock/test-model',
         next_edit: {
-          prompt: 'prefix_suffix',
+          prompt: 'prefix-suffix',
         },
       },
     });
@@ -69,7 +69,7 @@ describe('E2E: Next Edit (copilotInlineEdit)', () => {
     expect(edit.text.length).toBeGreaterThan(0);
   });
 
-  it('should support prefix_suffix prompt mode', async () => {
+  it('should support prefix-suffix prompt mode', async () => {
     const prefixSuffixClient = createTestClient();
 
     await prefixSuffixClient.start({
@@ -82,7 +82,7 @@ describe('E2E: Next Edit (copilotInlineEdit)', () => {
         },
         model: 'mock/test-model',
         next_edit: {
-          prompt: 'prefix_suffix',
+          prompt: 'prefix-suffix',
         },
       },
     });
@@ -98,7 +98,7 @@ describe('E2E: Next Edit (copilotInlineEdit)', () => {
     expect(result.edits).toBeArray();
     expect(result.edits.length).toBeGreaterThan(0);
 
-    // Verify the edit has expected structure from prefix_suffix mode
+    // Verify the edit has expected structure from prefix-suffix mode
     const edit = result.edits[0]!;
     expect(edit.text).toBeDefined();
     expect(edit.reason).toBeDefined();
@@ -107,7 +107,7 @@ describe('E2E: Next Edit (copilotInlineEdit)', () => {
     await prefixSuffixClient.shutdown();
   });
 
-  it('should support line_number prompt mode', async () => {
+  it('should support line-number prompt mode', async () => {
     const lineNumberClient = createTestClient();
 
     await lineNumberClient.start({
@@ -120,7 +120,7 @@ describe('E2E: Next Edit (copilotInlineEdit)', () => {
         },
         model: 'mock/test-model',
         next_edit: {
-          prompt: 'line_number',
+          prompt: 'line-number',
         },
       },
     });
@@ -136,7 +136,7 @@ describe('E2E: Next Edit (copilotInlineEdit)', () => {
     expect(result.edits).toBeArray();
     expect(result.edits.length).toBeGreaterThan(0);
 
-    // Verify the edit has expected content from line_number mode
+    // Verify the edit has expected content from line-number mode
     const edit = result.edits[0]!;
     expect(edit.text).toBeDefined();
     expect(edit.reason).toBeDefined();

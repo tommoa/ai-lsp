@@ -20,6 +20,8 @@ import { type LanguageModel } from 'ai';
 import { generateText, type ModelMessage } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
+import type { LspEdit, Result } from './types';
+import { Options as Options_ } from './types';
 import PROMPT from '../../prompt/next-edit.txt';
 
 export namespace PrefixSuffix {
@@ -40,24 +42,9 @@ export namespace PrefixSuffix {
     reason?: string;
   };
 
-  /**
-   * LSP-style edit produced by this module. `textDocument.uri` may be empty
-   * when the underlying `TextDocument` implementation does not expose a URI.
-   */
-  export type LspEdit = {
-    range: Range;
-    textDocument: { uri: string };
-    text: string;
-    reason?: string;
-  };
-
-  /**
-   * Result type that includes edits and optional token usage.
-   */
-  export type Result = {
-    edits: LspEdit[];
-    tokenUsage?: TokenUsage;
-  };
+  export interface Options extends Options_ {
+    prompt: 'prefix-suffix';
+  }
 
   /**
    * Parse raw LLM output into an array of normalized `LLMHint` objects.
@@ -72,11 +59,13 @@ export namespace PrefixSuffix {
    * @returns normalized `LLMHint[]`
    * @throws when parsing fails or an item does not match the expected shape
    */
-  export function parseLLMResponse(raw: string, log?: Log): LLMHint[] {
-    using _timer = log
-      ? time(log, 'info', 'next-edit.prefix-suffix.parseLLMResponse')
-      : undefined;
-    log?.('debug', `parseLLMResponse rawLen=${raw.length}`);
+  export function parseLLMResponse(raw: string, log: Log): LLMHint[] {
+    using _timer = time(
+      log,
+      'info',
+      'next-edit.prefix-suffix.parseLLMResponse',
+    );
+    log('debug', `parseLLMResponse rawLen=${raw.length}`);
 
     const parsed = Parser.parseResponse(raw, log);
 
@@ -84,7 +73,7 @@ export namespace PrefixSuffix {
     for (const item of parsed) {
       if (typeof item !== 'object' || item === null) {
         const err = new Error('Invalid hint shape from LLM');
-        log?.('error', `parseLLMResponse: ${String(err)}`);
+        log('error', `parseLLMResponse: ${String(err)}`);
         throw err;
       }
 
@@ -96,7 +85,7 @@ export namespace PrefixSuffix {
         typeof it.text !== 'string'
       ) {
         const err = new Error('Invalid hint shape from LLM');
-        log?.(
+        log(
           'error',
           `parseLLMResponse: ${String(err)} - item=${clip(
             JSON.stringify(item),
@@ -114,7 +103,7 @@ export namespace PrefixSuffix {
       });
     }
 
-    log?.('info', `parseLLMResponse parsed=${hints.length}`);
+    log('info', `parseLLMResponse parsed=${hints.length}`);
     return hints;
   }
 
@@ -138,7 +127,7 @@ export namespace PrefixSuffix {
    */
   export function convertLLMHintsToEdits(
     opts: { document: TextDocument; hints: LLMHint[] },
-    log?: Log,
+    log: Log,
   ): LspEdit[] {
     const { document, hints } = opts;
     const rawDoc = document.getText();
@@ -146,14 +135,17 @@ export namespace PrefixSuffix {
     const uri = (document as { uri?: string }).uri ?? '';
     const doc = rawDoc; // operate directly on the document text
 
-    using _timer = log
-      ? time(log, 'info', 'next-edit.prefix-suffix.convertLLMHintsToEdits', {
-          hints: hints.length,
-          uri,
-        })
-      : undefined;
+    using _timer = time(
+      log,
+      'info',
+      'next-edit.prefix-suffix.convertLLMHintsToEdits',
+      {
+        hints: hints.length,
+        uri,
+      },
+    );
 
-    log?.('debug', `convertLLMHintsToEdits docLen=${doc.length}`);
+    log('debug', `convertLLMHintsToEdits docLen=${doc.length}`);
 
     const edits: LspEdit[] = [];
 
@@ -166,7 +158,7 @@ export namespace PrefixSuffix {
       if (exactIndex === -1) {
         // We didn't find what the AI has returned to us. We should log that it
         // didn't give us the correct format, and return an empty hint.
-        log?.(
+        log(
           'warn',
           `Skipping unresolved hint uri=${uri} hint=${clip(
             JSON.stringify(hint),
@@ -192,7 +184,7 @@ export namespace PrefixSuffix {
       });
     }
 
-    log?.('info', `convertLLMHintsToEdits produced=${edits.length}`);
+    log('info', `convertLLMHintsToEdits produced=${edits.length}`);
     return edits;
   }
 
@@ -211,15 +203,13 @@ export namespace PrefixSuffix {
   export async function requestLLMHints(opts: {
     model: LanguageModel;
     document: TextDocument;
-    log?: Log;
+    log: Log;
   }): Promise<{ hints: LLMHint[]; tokenUsage?: TokenUsage }> {
     const { model, document, log } = opts;
-    using _timer = log
-      ? time(log, 'info', 'next-edit.prefix-suffix.requestLLMHints')
-      : undefined;
+    using _timer = time(log, 'info', 'next-edit.prefix-suffix.requestLLMHints');
     if (!model) throw new Error('No model provided');
 
-    log?.('debug', `requestLLMHints language=${document.languageId}`);
+    log('debug', `requestLLMHints language=${document.languageId}`);
 
     // Build messages array containing system instructions, language hint,
     // and full document text. We normalize newlines for prompt stability.
@@ -249,7 +239,7 @@ export namespace PrefixSuffix {
     // Extract token usage from response
     const tokenUsage = extractTokenUsage(res) ?? undefined;
 
-    log?.(
+    log(
       'debug',
       `requestLLMHints rawOutputLen=${String(rawOutput).length} ` +
         `preview=${clip(String(rawOutput))}`,
@@ -262,11 +252,7 @@ export namespace PrefixSuffix {
    * Convenience helper: request LLM hints for `document` and convert them to
    * precise LSP edits.
    */
-  export async function generate(opts: {
-    model: LanguageModel;
-    document: TextDocument;
-    log?: Log;
-  }): Promise<Result> {
+  export async function generate(opts: Options): Promise<Result> {
     const { model, document, log } = opts;
     const { hints, tokenUsage } = await requestLLMHints({
       model,

@@ -20,6 +20,8 @@ import { type LanguageModel } from 'ai';
 import { generateText, type ModelMessage } from 'ai';
 import { type Range } from 'vscode-languageserver-types';
 import { type TextDocument } from 'vscode-languageserver-textdocument';
+import { type LspEdit, type Result } from './types';
+import { Options as Options_ } from './types';
 import PROMPT from '../../prompt/next-edit-linenum.txt';
 
 export namespace LineNumber {
@@ -38,24 +40,9 @@ export namespace LineNumber {
     reason?: string;
   };
 
-  /**
-   * LSP-style edit produced by this module. `textDocument.uri` may be empty
-   * when the underlying `TextDocument` implementation does not expose a URI.
-   */
-  export type LspEdit = {
-    range: Range;
-    textDocument: { uri: string };
-    text: string;
-    reason?: string;
-  };
-
-  /**
-   * Result type that includes edits and optional token usage.
-   */
-  export type Result = {
-    edits: LspEdit[];
-    tokenUsage?: TokenUsage;
-  };
+  export interface Options extends Options_ {
+    prompt: 'line-number';
+  }
 
   /**
    * Add line number prefixes to file content.
@@ -79,10 +66,8 @@ export namespace LineNumber {
    * @returns normalized `LLMHint[]`
    * @throws when parsing fails or an item does not match the expected shape
    */
-  export function parseLLMResponse(raw: string, log?: Log): LLMHint[] {
-    using _timer = log
-      ? time(log, 'info', 'next-edit.line-number.parseLLMResponse')
-      : undefined;
+  export function parseLLMResponse(raw: string, log: Log): LLMHint[] {
+    using _timer = time(log, 'info', 'next-edit.line-number.parseLLMResponse');
     log?.('debug', `parseLLMResponse rawLen=${raw.length}`);
 
     const parsed = Parser.parseResponse(raw, log);
@@ -91,7 +76,7 @@ export namespace LineNumber {
     for (const item of parsed) {
       if (typeof item !== 'object' || item === null) {
         const err = new Error('Invalid hint shape from LLM');
-        log?.('error', `parseLLMResponse: ${String(err)}`);
+        log('error', `parseLLMResponse: ${String(err)}`);
         throw err;
       }
 
@@ -103,7 +88,7 @@ export namespace LineNumber {
       ) {
         const err = new Error('Invalid hint shape from LLM');
         const itemStr = JSON.stringify(item);
-        log?.(
+        log(
           'error',
           `parseLLMResponse: ${String(err)} - ` + `item=${clip(itemStr)}`,
         );
@@ -118,7 +103,7 @@ export namespace LineNumber {
       });
     }
 
-    log?.('info', `parseLLMResponse parsed=${hints.length}`);
+    log('info', `parseLLMResponse parsed=${hints.length}`);
     return hints;
   }
 
@@ -134,21 +119,24 @@ export namespace LineNumber {
    */
   export function convertLLMHintsToEdits(
     opts: { document: TextDocument; hints: LLMHint[] },
-    log?: Log,
+    log: Log,
   ): LspEdit[] {
     const { document, hints } = opts;
     const rawDoc = document.getText();
     const uri = (document as { uri?: string }).uri ?? '';
     const doc = rawDoc;
 
-    using _timer = log
-      ? time(log, 'info', 'next-edit.line-number.convertLLMHintsToEdits', {
-          hints: hints.length,
-          uri,
-        })
-      : undefined;
+    using _timer = time(
+      log,
+      'info',
+      'next-edit.line-number.convertLLMHintsToEdits',
+      {
+        hints: hints.length,
+        uri,
+      },
+    );
 
-    log?.('debug', `convertLLMHintsToEdits docLen=${doc.length}`);
+    log('debug', `convertLLMHintsToEdits docLen=${doc.length}`);
 
     const lines = doc.split('\n');
     const lineCount = lines.length;
@@ -168,7 +156,7 @@ export namespace LineNumber {
         const msg =
           `Skipping invalid line range: startLine=${startLine} ` +
           `endLine=${endLine} totalLines=${lineCount} uri=${uri}`;
-        log?.('warn', msg);
+        log('warn', msg);
         continue;
       }
 
@@ -205,13 +193,13 @@ export namespace LineNumber {
         reason,
       });
 
-      log?.(
+      log(
         'debug',
         `Applied line-based hint lines=${startLine}-${endLine} uri=${uri}`,
       );
     }
 
-    log?.('info', `convertLLMHintsToEdits produced=${edits.length}`);
+    log('info', `convertLLMHintsToEdits produced=${edits.length}`);
     return edits;
   }
 
@@ -229,15 +217,13 @@ export namespace LineNumber {
   export async function requestLLMHints(opts: {
     model: LanguageModel;
     document: TextDocument;
-    log?: Log;
+    log: Log;
   }): Promise<{ hints: LLMHint[]; tokenUsage?: TokenUsage }> {
     const { model, document, log } = opts;
-    using _timer = log
-      ? time(log, 'info', 'next-edit.line-number.requestLLMHints')
-      : undefined;
+    using _timer = time(log, 'info', 'next-edit.line-number.requestLLMHints');
     if (!model) throw new Error('No model provided');
 
-    log?.('debug', `requestLLMHints language=${document.languageId}`);
+    log('debug', `requestLLMHints language=${document.languageId}`);
 
     // Build messages array with line-numbered content.
     const docText = normalizeNewlines(document.getText());
@@ -266,7 +252,7 @@ export namespace LineNumber {
     // Extract token usage from response
     const tokenUsage = extractTokenUsage(res) ?? undefined;
 
-    log?.(
+    log(
       'debug',
       `requestLLMHints rawOutputLen=${String(rawOutput).length} ` +
         `preview=${clip(String(rawOutput))}`,
@@ -279,11 +265,7 @@ export namespace LineNumber {
    * Convenience helper: request LLM hints for `document` and convert them to
    * precise LSP edits.
    */
-  export async function generate(opts: {
-    model: LanguageModel;
-    document: TextDocument;
-    log?: Log;
-  }): Promise<Result> {
+  export async function generate(opts: Options): Promise<Result> {
     const { model, document, log } = opts;
     const { hints, tokenUsage } = await requestLLMHints({
       model,

@@ -73,7 +73,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
    * token usage extraction, or benchmark cost calculations
    */
   it('should generate valid edits with token usage', async () => {
-    // Test prefix_suffix approach
+    // Test prefix-suffix approach
     const prefixSuffixResponse = JSON.stringify([
       {
         prefix: 'function test() {\n  ',
@@ -91,7 +91,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result1 = await NextEdit.generate({
       model: model1,
       document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
+      prompt: 'prefix-suffix',
       log: NOOP_LOG,
     });
 
@@ -102,7 +102,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
       verifyTokenUsageAndCost(result1.tokenUsage);
     }
 
-    // Test line_number approach
+    // Test line-number approach
     const lineNumberResponse = JSON.stringify([
       {
         startLine: 1,
@@ -116,7 +116,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result2 = await NextEdit.generate({
       model: model2,
       document: doc,
-      prompt: NextEdit.PromptType.LineNumber,
+      prompt: 'line-number',
       log: NOOP_LOG,
     });
 
@@ -147,7 +147,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
+      prompt: 'prefix-suffix',
       log: NOOP_LOG,
     });
 
@@ -169,7 +169,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
       await NextEdit.generate({
         model: malformedModel,
         document: doc,
-        prompt: NextEdit.PromptType.PrefixSuffix,
+        prompt: 'prefix-suffix',
         log: NOOP_LOG,
       });
     } catch (e) {
@@ -207,7 +207,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
+      prompt: 'prefix-suffix',
       log: NOOP_LOG,
     });
     expect(result.edits).toBeArray();
@@ -319,7 +319,7 @@ describe('Benchmark Utility Functions Integration', () => {
     const result = await NextEdit.generate({
       model,
       document: doc,
-      prompt: NextEdit.PromptType.PrefixSuffix,
+      prompt: 'prefix-suffix',
       log: NOOP_LOG,
     });
 
@@ -418,7 +418,7 @@ describe('Benchmark Script Smoke Tests', () => {
       proc.on('close', code => {
         if (code === 0) {
           // Verify some expected output
-          expect(stdout).toContain('prefix_suffix');
+          expect(stdout).toContain('prefix-suffix');
           resolve();
         } else {
           reject(

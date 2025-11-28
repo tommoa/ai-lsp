@@ -26,7 +26,7 @@ M.configs['ai-lsp'] = {
 
     -- next_edit can use the same model or a different one
     next_edit = {
-      prompt = "prefix_suffix",
+      prompt = "prefix-suffix",
     },
   },
   cmd = { 'bun', 'run', '/path/to/ai-lsp/index.ts', '--stdio' },

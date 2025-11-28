@@ -23,7 +23,7 @@ describe('E2E: Configuration Changes', () => {
         },
         model: 'mock/test-model',
         next_edit: {
-          prompt: 'prefix_suffix',
+          prompt: 'prefix-suffix',
         },
       },
     });
@@ -34,7 +34,7 @@ describe('E2E: Configuration Changes', () => {
   });
 
   it('should handle configuration change for next_edit mode', async () => {
-    // First, verify prefix_suffix mode works
+    // First, verify prefix-suffix mode works
     const uri1 = await setupTestDocument(
       client,
       'function test() {\n  // TODO: implement\n}',
@@ -44,7 +44,7 @@ describe('E2E: Configuration Changes', () => {
     expect(result1.edits).toBeArray();
     expect(result1.edits.length).toBeGreaterThan(0);
 
-    // Change configuration to line_number mode
+    // Change configuration to line-number mode
     await client.changeConfiguration({
       providers: {
         mock: {
@@ -54,14 +54,14 @@ describe('E2E: Configuration Changes', () => {
       },
       model: 'mock/test-model',
       next_edit: {
-        prompt: 'line_number',
+        prompt: 'line-number',
       },
     });
 
     // Wait a bit for config to propagate
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Verify line_number mode now works
+    // Verify line-number mode now works
     const uri2 = await setupTestDocument(
       client,
       'function test() {\n  // TODO: implement\n}',

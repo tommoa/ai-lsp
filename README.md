@@ -82,8 +82,8 @@ init_options = {
   next_edit = {
     -- Optional: use a different model for next-edit
     -- model = "anthropic/claude-3-5-sonnet-20241022",
-    -- Prompt type: "prefix_suffix" (default) or "line_number"
-    prompt = "prefix_suffix",
+    -- Prompt type: "prefix-suffix" (default) or "line-number"
+    prompt = "prefix-suffix",
   },
   inline_completion = {
     -- Optional: use a different model for inline completions
@@ -100,8 +100,8 @@ The `next_edit` mode generates code edits based on the full document context.
 
 - **`model`** (optional): Override the global model for this mode
 - **`prompt`** (optional): How the LLM receives file context
-  - `"prefix_suffix"` (default): LLM receives compact hints with prefix/suffix anchoring. Use this when you want precise, localized edits.
-  - `"line_number"`: LLM receives line numbers with full file content. Use this when you want the model to have better context or when prefix/suffix anchoring is unreliable.
+  - `"prefix-suffix"` (default): LLM receives compact hints with prefix/suffix anchoring. Use this when you want precise, localized edits.
+  - `"line-number"`: LLM receives line numbers with full file content. Use this when you want the model to have better context or when prefix/suffix anchoring is unreliable.
 
 #### `inline_completion`
 
@@ -281,7 +281,7 @@ bun run scripts/benchmark.ts \
 bun run scripts/benchmark.ts \
   --file tests/fixtures/small/simple-refactor.ts \
   --models google/gemini-flash-latest \
-  --approach prefix_suffix
+  --approach prefix-suffix
 
 # Compare multiple models
 bun run scripts/benchmark.ts \
@@ -312,7 +312,7 @@ bun run scripts/benchmark.ts \
 
 - `--file <path>` - Input file to benchmark (required)
 - `--models <m1,m2>` - Comma-separated models to test (required)
-- `--approach <prefix_suffix|line_number|both>` - Prompt strategy (default:
+- `--approach <prefix-suffix|line-number|both>` - Prompt strategy (default:
   both)
 - `--runs N` - Number of runs per model/approach (default: 3)
 - `--concurrency N` - Parallel workers (default: 2)
