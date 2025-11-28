@@ -10,10 +10,10 @@
   ],
   "scripts": {
     "check:deps": "bun run scripts/check-deps.ts",
+    "check:nix": "bun run scripts/check-nix-hash.ts",
     "format": "prettier --write .",
-    "lint": "bun run check:deps && eslint . --ext .ts,.tsx,.js,.jsx",
-    "lint:fix": "eslint . --ext .ts,.tsx,.js,.jsx --fix",
-    "prepare": "husky install",
+    "lint": "bun run check:deps && bun run check:nix && eslint . --ext .ts,.tsx,.js,.jsx",
+    "lint:fix": "bun run check:deps && bun run scripts/check-nix-hash.ts --fix && eslint . --ext .ts,.tsx,.js,.jsx --fix",
     "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --splitting",
     "build:bundle": "bun build ./src/index.ts --outfile ./dist/cli.js --target bun --format esm",
     "start": "bun run src/index.ts",
@@ -29,12 +29,9 @@
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^8.46.1",
     "@typescript-eslint/parser": "^8.46.1",
-    "esbuild": "^0.19.12",
     "eslint": "^9.38.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.2.4",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "vscode-jsonrpc": "^8.2.1",
@@ -53,17 +50,5 @@
     "ai": "^5.0.89",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12"
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "npx lint-staged"
-    }
-  },
-  "lint-staged": {
-    "*.{js,ts,tsx,jsx}": [
-      "prettier --write",
-      "eslint --fix",
-      "git add"
-    ]
   }
 }

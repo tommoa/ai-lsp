@@ -52,6 +52,107 @@ jobs:
           coverage-files: ./coverage/lcov.info
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+  nix-check:
+    name: Nix Flake Check
+    runs-on: ubuntu-latest
+    # Wait for hash update to complete first
+    needs: [update-nix-hash]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check flake
+        run: nix flake check
+
+      - name: Build package
+        run: nix build .#default
+
+      - name: Verify package
+        run: nix run .#default -- --version || echo "Version check skipped"
+
+  update-nix-hash:
+    name: Update Nix Hash
+    runs-on: ubuntu-latest
+    # Only run on PRs from the same repo or pushes to master
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          ref: ${{ github.head_ref || github.ref_name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+
+      - name: Setup Bun environment
+        uses: ./.github/actions/setup
+
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+      - name: Update node_modules hash
+        run: |
+          set -euo pipefail
+          echo "🔄 Checking if node_modules hash needs update..."
+          bun run check:nix --fix
+
+      - name: Commit hash changes
+        env:
+          TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          echo "🔍 Checking for changes in nix/hashes.json..."
+
+          if ! git diff --quiet nix/hashes.json; then
+            echo "📝 Changes detected in nix/hashes.json"
+            git add nix/hashes.json
+
+            # Check if HEAD commit modified package.json or bun.lock
+            if git diff-tree --no-commit-id --name-only -r HEAD | grep -qE '^(package\.json|bun\.lock)$'; then
+              echo "🔄 HEAD commit changed package.json/bun.lock, amending it to include hash"
+              git commit --amend --no-edit
+
+              BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+              echo "🚀 Force pushing amended commit to branch: $BRANCH"
+              git push --force-with-lease origin HEAD:"$BRANCH"
+              echo "✅ Hash updated via commit amend (preserves git bisect)"
+            else
+              echo "📝 Creating new commit for hash update"
+              git commit -m "chore(nix): update node_modules hash" \
+                -m "The package.json or bun.lock has changed, requiring an" \
+                -m "update to the Nix fixed-output derivation hash. The" \
+                -m "hash ensures reproducible builds by verifying the exact" \
+                -m "node_modules output matches expectations."
+
+              BRANCH="${TARGET_BRANCH:-${GITHUB_REF_NAME}}"
+              echo "🌳 Pulling latest from branch: $BRANCH"
+              # Try to pull latest changes, but continue if already up to date
+              git pull --rebase origin "$BRANCH" || {
+                echo "⚠️  Pull failed or already up to date, continuing..."
+              }
+              echo "🚀 Pushing changes to branch: $BRANCH"
+              git push origin HEAD:"$BRANCH"
+              echo "✅ Hash updated and pushed"
+            fi
+          else
+            echo "✅ No changes needed. Hash is already up to date."
+          fi
+
   build:
     name: Build
     runs-on: ubuntu-latest

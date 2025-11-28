@@ -49,6 +49,30 @@ To install dependencies:
 bun install
 ```
 
+### Installation with Nix
+
+If you use Nix with flakes enabled:
+
+```bash
+# Enter development environment with all dependencies
+nix develop
+
+# Run the LSP server directly without cloning
+nix run github:tommoa/ai-lsp
+```
+
+The flake provides several convenience apps for development:
+
+```bash
+nix run .#test       # Run all tests
+nix run .#test-unit  # Run unit tests only
+nix run .#test-e2e   # Run e2e tests
+nix run .#lint       # Check code style
+nix run .#typecheck  # Type check with tsc
+```
+
+See `nix flake show` for all available apps.
+
 ## Running the LSP Server
 
 To run the LSP server:
@@ -430,6 +454,10 @@ This provides statistical analysis including:
 - Side-by-side comparison tables
 
 ## Development
+
+> **Nix users:** All commands below can be run via `nix run .#<app>` for
+> reproducible execution. See
+> [Installation with Nix](#installation-with-nix) for details.
 
 ### Available Scripts
 

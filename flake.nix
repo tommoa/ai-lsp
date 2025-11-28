@@ -18,6 +18,9 @@
       pkgsFor = system: nixpkgs.legacyPackages.${system};
       packageJson = builtins.fromJSON (builtins.readFile ./package.json);
       version = packageJson.version;
+      hashesFile = "${./nix}/hashes.json";
+      hashesData = builtins.fromJSON (builtins.readFile hashesFile);
+      nodeModulesHash = hashesData.nodeModules;
     in
     {
       # Development shell
@@ -61,34 +64,14 @@
       packages = forEachSystem (system:
         let
           pkgs = pkgsFor system;
+          mkNodeModules = pkgs.callPackage ./nix/node-modules.nix { };
+          mkPackage = pkgs.callPackage ./nix/ai-lsp.nix { };
         in
         {
-          default = pkgs.stdenv.mkDerivation {
-            pname = "ai-lsp";
+          default = mkPackage {
             inherit version;
-            
             src = ./.;
-            
-            buildInputs = [ pkgs.bun ];
-            
-            buildPhase = ''
-              export HOME=$TMPDIR
-              bun install --frozen-lockfile
-              bun run build:bundle
-            '';
-            
-            installPhase = ''
-              mkdir -p $out/bin
-              cp dist/cli.js $out/bin/ai-lsp
-              chmod +x $out/bin/ai-lsp
-            '';
-            
-            meta = with lib; {
-              description = "AI-powered LSP server with flexible model provider support";
-              license = licenses.asl20;
-              platforms = systems;
-              maintainers = [ ];
-            };
+            mkNodeModules = args: mkNodeModules (args // { hash = nodeModulesHash; });
           };
         }
       );
