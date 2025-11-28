@@ -6,6 +6,7 @@ out
 dist
 generated
 *.tgz
+result
 
 # code coverage
 coverage
