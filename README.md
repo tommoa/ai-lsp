@@ -119,9 +119,8 @@ The `inline_completion` mode generates completions at the cursor position. It ca
   base model variant or switch to `"chat"` mode.
 
 - **`fim_format`** (optional): FIM template to use when `prompt = "fim"`
-  - Can be a template name: `"openai"`, `"starcoder"`, `"codellama"`,
-    `"deepseek"`, or `"qwen"`
-  - Can be a custom template object with `prefix`, `middle`, and `suffix` tokens
+  - Can be a template name: `"openai"`, `"codellama"`, `"deepseek"`, or `"qwen"`
+  - Can be a custom template object with `template` and `stop` properties
   - If not specified, the format will be auto-detected from the model name
   - If auto-detection fails, defaults to OpenAI format
 
@@ -228,7 +227,6 @@ model name:
 - Models with `codellama` → CodeLlama format
 - Models with `deepseek` → DeepSeek format
 - Models with `qwen` → Qwen format
-- Models with `starcoder` → StarCoder format
 - Everything else → OpenAI format (default)
 
 ```lua
@@ -243,7 +241,9 @@ init_options = {
 
 #### Custom Template
 
-For models with non-standard FIM formats, you can define a custom template:
+For models with non-standard FIM formats, you can define a custom template.
+The template uses `${prefix}` and `${suffix}` placeholders that will be
+replaced with the code before and after the cursor:
 
 ```lua
 init_options = {
@@ -251,13 +251,24 @@ init_options = {
   inline_completion = {
     prompt = "fim",
     fim_format = {
-      prefix = "<|im_start|>user\n",
-      middle = "<|im_start|>assistant\n",
-      suffix = "<|im_end|>",
+      -- Template with ${prefix} and ${suffix} placeholders
+      template = "<|start|>${prefix}<|hole|>${suffix}<|end|>",
+      -- Stop sequences to halt generation
+      stop = {"<|hole|>", "<|start|>", "\n\n"},
+      -- Optional: name for debugging
+      name = "Custom Format",
     },
   },
 }
 ```
+
+The `fim_format` custom template object has the following properties:
+
+- **`template`** (required): String with `${prefix}` and `${suffix}` placeholders
+- **`stop`** (required): Array of stop sequences to halt generation
+- **`name`** (optional): Human-readable name for debugging
+- **`defaults`** (optional): Default values for additional placeholders (e.g., Qwen
+  uses `${repo_name}` and `${file_path}`)
 
 ## Benchmarking
 
