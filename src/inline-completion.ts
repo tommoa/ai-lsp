@@ -53,9 +53,9 @@ export namespace InlineCompletion {
     using _timer = time(log, 'info', 'InlineCompletion.generate');
 
     if (prompt === 'fim') {
-      return await FIM.generate(opts as FIM.Options);
+      return FIM.generate(opts as FIM.Options);
     } else {
-      return await Chat.generate(opts as Chat.Options);
+      return Chat.generate(opts as Chat.Options);
     }
   }
 }

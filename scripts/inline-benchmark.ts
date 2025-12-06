@@ -166,7 +166,7 @@ async function generateCompletion(opts: {
     position: document.positionAt(offset),
   };
 
-  return await InlineCompletion.generate({
+  return InlineCompletion.generate({
     model,
     document,
     position,

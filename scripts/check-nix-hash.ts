@@ -80,7 +80,7 @@ async function computeNixHash(): Promise<string | null> {
   const result = await tryBuild(true);
 
   if (result === 'retry') {
-    return await tryBuild(false);
+    return tryBuild(false);
   }
 
   return result;

@@ -52,14 +52,14 @@ export namespace NextEdit {
       : undefined;
 
     if (prompt === 'line-number') {
-      return await LineNumber.generate({
+      return LineNumber.generate({
         prompt: 'line-number',
         model,
         document,
         log,
       });
     } else {
-      return await PrefixSuffix.generate({
+      return PrefixSuffix.generate({
         prompt: 'prefix-suffix',
         model,
         document,
