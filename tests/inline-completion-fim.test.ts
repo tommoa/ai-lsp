@@ -1,7 +1,7 @@
 /**
  * Unit tests for FIM (Fill-in-the-Middle) based inline completion
  *
- * Tests the core FIM.generate() function with mock models.
+ * Tests the core generateFim() function with mock models.
  * Covers:
  * - Basic FIM completion generation
  * - Error handling (unsupported models, empty responses)
@@ -12,8 +12,8 @@
 import { describe, it, expect } from 'bun:test';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
-import { FIM } from '../src/inline-completion/fim';
-import { InlineCompletion } from '../src/inline-completion';
+import { generate as generateFim } from '../src/inline-completion/fim';
+import { generateCompletion } from '../src/inline-completion';
 import { UnsupportedPromptError } from '../src/inline-completion/errors';
 import {
   BUILTIN_FIM_TEMPLATES,
@@ -23,7 +23,7 @@ import { NOOP_LOG } from '../src/util';
 import { createMockModel } from './helpers/mock-core';
 import { mockResponses } from './helpers/mock-responses';
 
-describe('FIM.generate', () => {
+describe('generateFim', () => {
   describe('basic completion generation', () => {
     it('should generate completion from prefix and suffix', async () => {
       const doc = TextDocument.create(
@@ -38,7 +38,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: ' sum' });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -67,7 +67,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: 'pass' });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -94,7 +94,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: ' b;' });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -123,7 +123,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: mockResponses.empty() });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -144,7 +144,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: '   \n\t  ' });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -170,7 +170,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: '// comment\n' });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -197,7 +197,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: mockResponses.empty() });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -238,7 +238,7 @@ describe('FIM.generate', () => {
       } as any;
 
       try {
-        await FIM.generate({
+        await generateFim({
           prompt: 'fim',
           model: badModel,
           document: doc,
@@ -281,7 +281,7 @@ describe('FIM.generate', () => {
       } as any;
 
       try {
-        await FIM.generate({
+        await generateFim({
           prompt: 'fim',
           model: errorModel,
           document: doc,
@@ -318,7 +318,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: '"Hello, world!"' });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -349,7 +349,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: '42' });
-      const result = await FIM.generate({
+      const result = await generateFim({
         prompt: 'fim',
         model,
         document: doc,
@@ -378,7 +378,7 @@ describe('FIM.generate', () => {
       };
 
       const model = createMockModel({ response: ' fim_completion' });
-      const result = await InlineCompletion.generate({
+      const result = await generateCompletion({
         prompt: 'fim',
         model,
         document: doc,
@@ -418,7 +418,7 @@ describe('FIM.generate', () => {
       } as any;
 
       try {
-        await InlineCompletion.generate({
+        await generateCompletion({
           prompt: 'fim',
           model: badModel,
           document: doc,

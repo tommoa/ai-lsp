@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import {
   extractTokenUsage,
-  Parser,
   normalizeNewlines,
   clip,
   cleanFimResponse,
@@ -124,73 +123,6 @@ describe('extractTokenUsage', () => {
       input: 100,
       output: 50,
     });
-  });
-});
-
-describe('Parser.parseJSONObject', () => {
-  it('should parse valid JSON object', () => {
-    const json = '{"key": "value", "num": 42}';
-    const result = Parser.parseJSONObject(json);
-    expect(result).toEqual({ key: 'value', num: 42 });
-  });
-
-  it('should extract JSON object from wrapped text', () => {
-    const json = 'Here is the result: {"key": "value"} and some more text';
-    const result = Parser.parseJSONObject(json);
-    expect(result).toEqual({ key: 'value' });
-  });
-
-  it('should return null for invalid JSON', () => {
-    const json = 'This is not JSON at all';
-    const result = Parser.parseJSONObject(json);
-    expect(result).toBeNull();
-  });
-
-  it('should return null when no braces found', () => {
-    const json = 'No braces here';
-    const result = Parser.parseJSONObject(json);
-    expect(result).toBeNull();
-  });
-
-  it('should handle nested objects', () => {
-    const json = '{"outer": {"inner": "value"}}';
-    const result = Parser.parseJSONObject(json);
-    expect(result).toEqual({ outer: { inner: 'value' } });
-  });
-});
-
-describe('Parser.parseResponse', () => {
-  it('should parse valid JSON array', () => {
-    const json = '[{"a": 1}, {"b": 2}]';
-    const result = Parser.parseResponse(json);
-    expect(result).toEqual([{ a: 1 }, { b: 2 }]);
-  });
-
-  it('should extract JSON array from wrapped text', () => {
-    const json = 'Here is the array: [{"a": 1}] done';
-    const result = Parser.parseResponse(json);
-    expect(result).toEqual([{ a: 1 }]);
-  });
-
-  it('should throw on non-array JSON', () => {
-    const json = '{"key": "value"}';
-    expect(() => Parser.parseResponse(json)).toThrow('not an array');
-  });
-
-  it('should throw on invalid JSON', () => {
-    const json = 'This is not JSON';
-    expect(() => Parser.parseResponse(json)).toThrow('not an array');
-  });
-
-  it('should throw when no brackets found', () => {
-    const json = 'No brackets here';
-    expect(() => Parser.parseResponse(json)).toThrow('not an array');
-  });
-
-  it('should handle empty array', () => {
-    const json = '[]';
-    const result = Parser.parseResponse(json);
-    expect(result).toEqual([]);
   });
 });
 

@@ -12,9 +12,18 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocuments } from 'vscode-languageserver';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Provider, Model } from './provider';
-import { InlineCompletion } from './inline-completion';
-import { NextEdit } from './next-edit';
+import {
+  create as createProvider,
+  parseModelString,
+  type Config as ProviderConfig,
+  type Selector,
+  Model,
+} from './provider';
+import {
+  generateCompletion,
+  type Options as InlineCompletionOptions,
+} from './inline-completion';
+import { generateEdit, type Options as NextEditOptions } from './next-edit';
 import { extractPartialWord } from './completion-utils';
 import { Level, Log, time } from './util';
 import {
@@ -49,24 +58,24 @@ function resolveFimTemplate(
 // top-level functions.
 // Selected provider selector (resolves model id to a concrete model
 // representation for `generateText`). Can be replaced during init.
-let provider: Model.Selector = (model: string) => model as any;
+let provider: Selector = (model: string) => model as any;
 let SELECTED_MODEL: string | undefined = undefined;
 let WORKSPACE_ROOT_URI: string | null = null;
 
 // Mode-specific configuration.
 interface NextEditModeConfig {
   model?: string;
-  prompt?: NextEdit.Options['prompt'];
+  prompt?: NextEditOptions['prompt'];
 }
 
 interface InlineCompletionModeConfig {
   model?: string;
-  prompt?: InlineCompletion.Options['prompt'];
+  prompt?: InlineCompletionOptions['prompt'];
   fim_format?: string | FimTemplate;
 }
 
 interface InitOptions {
-  providers?: Record<string, Provider.Config>;
+  providers?: Record<string, ProviderConfig>;
   model?: string;
   next_edit?: NextEditModeConfig;
   inline_completion?: InlineCompletionModeConfig;
@@ -74,15 +83,15 @@ interface InitOptions {
 
 // Mode-specific runtime configuration after initialization.
 interface NextEditConfig {
-  model: Model.Model;
+  model: Model;
   modelId: string;
-  prompt: NextEdit.Options['prompt'];
+  prompt: NextEditOptions['prompt'];
 }
 
 interface InlineCompletionConfig {
-  model: Model.Model;
+  model: Model;
   modelId: string;
-  prompt: InlineCompletion.Options['prompt'];
+  prompt: InlineCompletionOptions['prompt'];
   fimFormat?: FimTemplate;
 }
 
@@ -122,9 +131,9 @@ const log: Log = (
 };
 
 type ProviderInitResult = {
-  factory: Model.Selector;
+  factory: Selector;
   provider: string;
-  model: Model.Model;
+  model: Model;
   modelId: string;
 };
 
@@ -138,11 +147,11 @@ async function initProvider(
     );
   }
 
-  const { provider, modelName } = Provider.parseModelString(initOpts.model);
+  const { provider, modelName } = parseModelString(initOpts.model);
 
   log('info', `provider=${provider}, model=${modelName}`);
 
-  const factory = await Provider.create({
+  const factory = await createProvider({
     provider,
     log,
     providers: initOpts.providers,
@@ -163,7 +172,7 @@ async function initProvider(
 
 async function initModeConfigs(
   initOpts: InitOptions,
-  globalProvider: Model.Selector,
+  globalProvider: Selector,
   globalModelId: string,
   log: Log,
 ): Promise<void> {
@@ -172,7 +181,7 @@ async function initModeConfigs(
   const nextEditModelId = nextEditOpts.model || globalModelId;
   const nextEditPrompt = nextEditOpts.prompt || 'prefix-suffix';
 
-  type NextEditPrompt = NextEdit.Options['prompt'];
+  type NextEditPrompt = NextEditOptions['prompt'];
 
   // Validate next_edit.prompt
   let validatedNextEditPrompt: NextEditPrompt = 'prefix-suffix';
@@ -194,7 +203,7 @@ async function initModeConfigs(
 
   log(
     'info',
-    `next-edit: model=${NEXT_EDIT_CONFIG.modelId}, ` +
+    `generateEdit: model=${NEXT_EDIT_CONFIG.modelId}, ` +
       `prompt=${NEXT_EDIT_CONFIG.prompt}`,
   );
 
@@ -203,7 +212,7 @@ async function initModeConfigs(
   const inlineCompletionModelId = inlineCompletionOpts.model || globalModelId;
   const inlineCompletionPrompt = inlineCompletionOpts.prompt || 'chat';
 
-  type InlinePrompt = InlineCompletion.Options['prompt'];
+  type InlinePrompt = InlineCompletionOptions['prompt'];
 
   // Validate inline_completion.prompt
   let validatedInlinePrompt: InlinePrompt = 'chat';
@@ -231,13 +240,13 @@ async function initModeConfigs(
   INLINE_COMPLETION_CONFIG = {
     model: globalProvider(inlineCompletionModelId),
     modelId: inlineCompletionModelId,
-    prompt: validatedInlinePrompt as InlineCompletion.Options['prompt'],
+    prompt: validatedInlinePrompt as InlineCompletionOptions['prompt'],
     fimFormat,
   };
 
   log(
     'info',
-    `inline-completion: model=${INLINE_COMPLETION_CONFIG.modelId}, ` +
+    `generateCompletion: model=${INLINE_COMPLETION_CONFIG.modelId}, ` +
       `prompt=${INLINE_COMPLETION_CONFIG.prompt}`,
   );
 }
@@ -319,9 +328,9 @@ connection.onCompletion(
     let result;
     try {
       const prompt =
-        INLINE_COMPLETION_CONFIG.prompt as InlineCompletion.Options['prompt'];
+        INLINE_COMPLETION_CONFIG.prompt as InlineCompletionOptions['prompt'];
 
-      result = await InlineCompletion.generate({
+      result = await generateCompletion({
         model: INLINE_COMPLETION_CONFIG.model.model,
         document: doc,
         position: pos,
@@ -332,9 +341,9 @@ connection.onCompletion(
           maxTokens: 256,
           workspaceRootUri: WORKSPACE_ROOT_URI,
         }),
-      } as InlineCompletion.Options);
+      } as InlineCompletionOptions);
     } catch (err) {
-      log('error', `InlineCompletion.generate failed: ${String(err)}`);
+      log('error', `generateCompletion failed: ${String(err)}`);
       throw err;
     }
 
@@ -426,7 +435,7 @@ connection.onRequest(
     }
 
     try {
-      const result = await NextEdit.generate({
+      const result = await generateEdit({
         model: NEXT_EDIT_CONFIG.model.model,
         document: doc,
         prompt: NEXT_EDIT_CONFIG.prompt,

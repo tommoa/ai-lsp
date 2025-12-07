@@ -4,8 +4,8 @@
  * These tests verify that breaking changes in src/ will be caught by the
  * benchmark test suite. They validate the critical paths:
  *
- * 1. NextEdit.generate() → edits → createEditDiff() → rateChange()
- * 2. InlineCompletion.generate() → completions → cost calculation
+ * 1. generateEdit() → edits → createEditDiff() → rateChange()
+ * 2. generateCompletion() → completions → cost calculation
  * 3. Full benchmark script execution with mock providers
  *
  * These tests are the PRIMARY DEFENSE against breaking changes in src/
@@ -16,8 +16,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import { NextEdit } from '../src/next-edit';
-import { InlineCompletion } from '../src/inline-completion';
+import { generateEdit } from '../src/next-edit';
+import { generateCompletion } from '../src/inline-completion';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   createEditDiff,
@@ -69,7 +69,7 @@ function verifyTokenUsageAndCost(tokenUsage: any) {
 
 describe('NextEdit Integration - Benchmark Compatibility', () => {
   /**
-   * PROTECTS AGAINST: Changes to NextEdit.generate() that break edit format,
+   * PROTECTS AGAINST: Changes to generateEdit() that break edit format,
    * token usage extraction, or benchmark cost calculations
    */
   it('should generate valid edits with token usage', async () => {
@@ -88,7 +88,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
   // TODO: implement
 }`);
 
-    const result1 = await NextEdit.generate({
+    const result1 = await generateEdit({
       model: model1,
       document: doc,
       prompt: 'prefix-suffix',
@@ -113,7 +113,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     ]);
     const model2 = createMockModel({ response: lineNumberResponse });
 
-    const result2 = await NextEdit.generate({
+    const result2 = await generateEdit({
       model: model2,
       document: doc,
       prompt: 'line-number',
@@ -144,7 +144,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const originalContent = 'const x = 1;';
     const doc = createTestDocument(originalContent);
 
-    const result = await NextEdit.generate({
+    const result = await generateEdit({
       model,
       document: doc,
       prompt: 'prefix-suffix',
@@ -166,7 +166,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
 
     let error: unknown;
     try {
-      await NextEdit.generate({
+      await generateEdit({
         model: malformedModel,
         document: doc,
         prompt: 'prefix-suffix',
@@ -204,7 +204,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
     const doc = createTestDocument(originalContent);
 
     // Step 1: Generate
-    const result = await NextEdit.generate({
+    const result = await generateEdit({
       model,
       document: doc,
       prompt: 'prefix-suffix',
@@ -230,7 +230,7 @@ describe('NextEdit Integration - Benchmark Compatibility', () => {
 
 describe('InlineCompletion Integration - Benchmark Compatibility', () => {
   /**
-   * PROTECTS AGAINST: Changes to InlineCompletion.generate() that break
+   * PROTECTS AGAINST: Changes to generateCompletion() that break
    * completion format, token usage, or error handling
    */
   it('should generate valid completions with token usage', async () => {
@@ -251,7 +251,7 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
       position: { line: 0, character: 13 },
     };
 
-    const result = await InlineCompletion.generate({
+    const result = await generateCompletion({
       prompt: 'chat',
       model,
       document: doc,
@@ -285,7 +285,7 @@ describe('InlineCompletion Integration - Benchmark Compatibility', () => {
       position: { line: 0, character: 13 },
     };
 
-    const result = await InlineCompletion.generate({
+    const result = await generateCompletion({
       prompt: 'chat',
       model,
       document: doc,
@@ -316,7 +316,7 @@ describe('Benchmark Utility Functions Integration', () => {
     const model = createMockModel({ response: prefixSuffixResponse });
     const doc = createTestDocument('function test() {}');
 
-    const result = await NextEdit.generate({
+    const result = await generateEdit({
       model,
       document: doc,
       prompt: 'prefix-suffix',

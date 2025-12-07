@@ -14,8 +14,8 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { NextEdit } from '../src/next-edit';
-import { InlineCompletion } from '../src/inline-completion';
+import { generateEdit } from '../src/next-edit';
+import { generateCompletion } from '../src/inline-completion';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   classifyParseError,
@@ -87,7 +87,7 @@ describe('Error Classification - NextEdit', () => {
 
     let error: unknown;
     try {
-      await NextEdit.generate({
+      await generateEdit({
         model,
         document: doc,
         prompt: 'prefix-suffix',
@@ -111,7 +111,7 @@ describe('Error Classification - NextEdit', () => {
 
     let error: unknown;
     try {
-      await NextEdit.generate({
+      await generateEdit({
         model,
         document: doc,
         prompt: 'prefix-suffix',
@@ -136,7 +136,7 @@ describe('Error Classification - NextEdit', () => {
 
     let error: unknown;
     try {
-      await NextEdit.generate({
+      await generateEdit({
         model,
         document: doc,
         prompt: 'prefix-suffix',
@@ -201,7 +201,7 @@ describe('Error Classification - NextEdit', () => {
 
     let error: unknown;
     try {
-      await NextEdit.generate({
+      await generateEdit({
         model: malformedPrefixSuffixModel,
         document: doc,
         prompt: 'prefix-suffix',
@@ -237,8 +237,8 @@ describe('Error Classification - InlineCompletion', () => {
       position: { line: 0, character: 13 },
     };
 
-    // InlineCompletion.generate should not throw - it returns empty completions
-    const result = await InlineCompletion.generate({
+    // generateCompletion should not throw - it returns empty completions
+    const result = await generateCompletion({
       prompt: 'chat',
       model,
       document: doc,
@@ -262,7 +262,7 @@ describe('Error Classification - InlineCompletion', () => {
       position: { line: 0, character: 13 },
     };
 
-    const result = await InlineCompletion.generate({
+    const result = await generateCompletion({
       prompt: 'chat',
       model,
       document: doc,
@@ -286,7 +286,7 @@ describe('Error Classification - InlineCompletion', () => {
       position: { line: 0, character: 13 },
     };
 
-    const result = await InlineCompletion.generate({
+    const result = await generateCompletion({
       prompt: 'chat',
       model,
       document: doc,
@@ -436,7 +436,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
 
     let caught = false;
     try {
-      await NextEdit.generate({
+      await generateEdit({
         model: errorModel,
         document: doc,
         prompt: 'prefix-suffix',
@@ -450,7 +450,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
 
     // Verify we can still run another benchmark with a working model
     const workingModel = createMockModel({ response: '[]' });
-    const result = await NextEdit.generate({
+    const result = await generateEdit({
       model: workingModel,
       document: doc,
       prompt: 'line-number',
@@ -476,7 +476,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
     };
 
     // Should not throw
-    const result1 = await InlineCompletion.generate({
+    const result1 = await generateCompletion({
       prompt: 'chat',
       model: errorModel,
       document: doc,
@@ -488,7 +488,7 @@ describe('Error Resilience - Benchmark Continuity', () => {
 
     // Should be able to run another completion
     const workingModel = createMockModel({ response: '[]' });
-    const result2 = await InlineCompletion.generate({
+    const result2 = await generateCompletion({
       prompt: 'chat',
       model: workingModel,
       document: doc,

@@ -11,60 +11,55 @@
  *   have better overall context or when prefix/suffix anchoring is unreliable.
  *
  * Public API
- * - generate({model,document,prompt,log,generateFn}): unified entry point
- * - PrefixSuffix, LineNumber: direct access to implementation modules
- *
- * Notes
- * - The module is model-agnostic: callers supply a prepared
- *   `ai.LanguageModel` instance and may inject a custom `generateFn` for
- *   testing or integration with different providers.
- * - Each implementation is intentionally conservative. Hints that cannot be
- *   mapped uniquely to a document location are skipped to avoid unsafe edits.
+ * - generateEdit({model,document,prompt,log}): unified entry point
  */
 
 import { time } from './util';
-import { PrefixSuffix } from './next-edit/prefix-suffix';
-import { LineNumber } from './next-edit/line-number';
-import { LspEdit as _LspEdit, Result as _Result } from './next-edit/types';
+import {
+  generate as generatePrefixSuffix,
+  type Options as PrefixSuffixOptions,
+} from './next-edit/prefix-suffix';
+import {
+  generate as generateLineNumber,
+  type Options as LineNumberOptions,
+} from './next-edit/line-number';
+import type { LspEdit, Result } from './next-edit/types';
 
-export namespace NextEdit {
-  export type LspEdit = _LspEdit;
-  export type Result = _Result;
+export type { LspEdit, Result };
 
-  export type Options = PrefixSuffix.Options | LineNumber.Options;
+export type Options = PrefixSuffixOptions | LineNumberOptions;
 
-  /**
-   * Unified generate function: request edit hints from a language model using
-   * the specified prompt strategy and convert them to precise LSP edits.
-   *
-   * @param opts.model - prepared LanguageModel instance
-   * @param opts.document - TextDocument to base hints on
-   * @param opts.prompt - strategy: "prefix-suffix" (default) or "line-number"
-   * @param opts.log - optional logger for diagnostics/timing
-   * @returns object with edits and optional token usage
-   */
-  export async function generate(opts: Options): Promise<Result> {
-    const { model, document, log } = opts;
-    const prompt = opts.prompt ?? 'prefix-suffix';
+/**
+ * Unified generate function: request edit hints from a language model using
+ * the specified prompt strategy and convert them to precise LSP edits.
+ *
+ * @param opts.model - prepared LanguageModel instance
+ * @param opts.document - TextDocument to base hints on
+ * @param opts.prompt - strategy: "prefix-suffix" (default) or "line-number"
+ * @param opts.log - optional logger for diagnostics/timing
+ * @returns object with edits and optional token usage
+ */
+export async function generateEdit(opts: Options): Promise<Result> {
+  const { model, document, log } = opts;
+  const prompt = opts.prompt ?? 'prefix-suffix';
 
-    using _timer = log
-      ? time(log, 'info', `next-edit.generate (${prompt})`)
-      : undefined;
+  using _timer = log
+    ? time(log, 'info', `generateEdit (${prompt})`)
+    : undefined;
 
-    if (prompt === 'line-number') {
-      return LineNumber.generate({
-        prompt: 'line-number',
-        model,
-        document,
-        log,
-      });
-    } else {
-      return PrefixSuffix.generate({
-        prompt: 'prefix-suffix',
-        model,
-        document,
-        log,
-      });
-    }
+  if (prompt === 'line-number') {
+    return generateLineNumber({
+      prompt: 'line-number',
+      model,
+      document,
+      log,
+    });
+  } else {
+    return generatePrefixSuffix({
+      prompt: 'prefix-suffix',
+      model,
+      document,
+      log,
+    });
   }
 }

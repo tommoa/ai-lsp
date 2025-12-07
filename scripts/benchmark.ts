@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 import fs from 'fs';
 import path from 'path';
-import { NextEdit } from '../src/next-edit';
-import { Provider } from '../src/provider';
+import { generateEdit } from '../src/next-edit';
+import { create as createProvider, parseModelString } from '../src/provider';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
   type ParseErrorType,
@@ -178,8 +178,8 @@ async function runApproachBenchmark(opts: {
 
   const runMetrics: RunMetrics[] = [];
 
-  const { provider, modelName } = Provider.parseModelString(modelStr);
-  const factory = await Provider.create({
+  const { provider, modelName } = parseModelString(modelStr);
+  const factory = await createProvider({
     provider,
     log: NOOP_LOG,
   });
@@ -207,7 +207,7 @@ async function runApproachBenchmark(opts: {
       try {
         const promptType =
           approach === 'prefix-suffix' ? 'prefix-suffix' : 'line-number';
-        const result = await NextEdit.generate({
+        const result = await generateEdit({
           model: model.model,
           document: docObj,
           prompt: promptType,

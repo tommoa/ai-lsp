@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'bun:test';
-import { PrefixSuffix } from '../src/next-edit/prefix-suffix';
+import {
+  type LLMHint,
+  parseLLMResponse,
+  convertLLMHintsToEdits,
+} from '../src/next-edit/prefix-suffix';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { NOOP_LOG } from '../src/util';
 
@@ -15,7 +19,7 @@ describe('PrefixSuffix', () => {
           reason: 'update',
         },
       ]);
-      const hints = PrefixSuffix.parseLLMResponse(raw, NOOP_LOG);
+      const hints = parseLLMResponse(raw, NOOP_LOG);
       expect(hints).toHaveLength(1);
       expect(hints[0]!.prefix).toBe('const x = ');
       expect(hints[0]!.existing).toBe('old');
@@ -33,7 +37,7 @@ describe('PrefixSuffix', () => {
           text: 'new\r\n',
         },
       ]);
-      const hints = PrefixSuffix.parseLLMResponse(raw, NOOP_LOG);
+      const hints = parseLLMResponse(raw, NOOP_LOG);
       expect(hints[0]!.prefix).toBe('line1\n');
       expect(hints[0]!.existing).toBe('old\n');
       expect(hints[0]!.suffix).toBe('\nline2');
@@ -42,14 +46,14 @@ describe('PrefixSuffix', () => {
 
     it('should throw on invalid hint shape - non-object', () => {
       const raw = JSON.stringify([null]);
-      expect(() => PrefixSuffix.parseLLMResponse(raw, NOOP_LOG)).toThrow(
+      expect(() => parseLLMResponse(raw, NOOP_LOG)).toThrow(
         'Invalid hint shape',
       );
     });
 
     it('should throw on invalid hint shape - missing fields', () => {
       const raw = JSON.stringify([{ prefix: 'test' }]);
-      expect(() => PrefixSuffix.parseLLMResponse(raw, NOOP_LOG)).toThrow(
+      expect(() => parseLLMResponse(raw, NOOP_LOG)).toThrow(
         'Invalid hint shape',
       );
     });
@@ -63,7 +67,7 @@ describe('PrefixSuffix', () => {
           text: 'new',
         },
       ]);
-      expect(() => PrefixSuffix.parseLLMResponse(raw, NOOP_LOG)).toThrow(
+      expect(() => parseLLMResponse(raw, NOOP_LOG)).toThrow(
         'Invalid hint shape',
       );
     });
@@ -75,7 +79,7 @@ describe('PrefixSuffix', () => {
           { prefix: 'x = ', existing: 'old', suffix: ';', text: 'new' },
         ]) +
         ' Done.';
-      const hints = PrefixSuffix.parseLLMResponse(raw, NOOP_LOG);
+      const hints = parseLLMResponse(raw, NOOP_LOG);
       expect(hints).toHaveLength(1);
       expect(hints[0]!.text).toBe('new');
     });
@@ -91,7 +95,7 @@ describe('PrefixSuffix', () => {
         docText,
       );
 
-      const hints: PrefixSuffix.LLMHint[] = [
+      const hints: LLMHint[] = [
         {
           prefix: 'const x = ',
           existing: '',
@@ -101,7 +105,7 @@ describe('PrefixSuffix', () => {
         },
       ];
 
-      const edits = PrefixSuffix.convertLLMHintsToEdits(
+      const edits = convertLLMHintsToEdits(
         {
           document: doc,
           hints,
@@ -121,7 +125,7 @@ describe('PrefixSuffix', () => {
         docText,
       );
 
-      const hints: PrefixSuffix.LLMHint[] = [
+      const hints: LLMHint[] = [
         {
           prefix: 'x = ',
           existing: '1',
@@ -131,7 +135,7 @@ describe('PrefixSuffix', () => {
         },
       ];
 
-      const edits = PrefixSuffix.convertLLMHintsToEdits(
+      const edits = convertLLMHintsToEdits(
         {
           document: doc,
           hints,
@@ -151,7 +155,7 @@ describe('PrefixSuffix', () => {
         docText,
       );
 
-      const hints: PrefixSuffix.LLMHint[] = [
+      const hints: LLMHint[] = [
         {
           prefix: 'const z = ', // doesn't exist
           existing: '99',
@@ -161,7 +165,7 @@ describe('PrefixSuffix', () => {
         },
       ];
 
-      const edits = PrefixSuffix.convertLLMHintsToEdits(
+      const edits = convertLLMHintsToEdits(
         {
           document: doc,
           hints,
@@ -180,7 +184,7 @@ describe('PrefixSuffix', () => {
         docText,
       );
 
-      const hints: PrefixSuffix.LLMHint[] = [
+      const hints: LLMHint[] = [
         {
           prefix: 'function test() { return ',
           existing: '42',
@@ -190,7 +194,7 @@ describe('PrefixSuffix', () => {
         },
       ];
 
-      const edits = PrefixSuffix.convertLLMHintsToEdits(
+      const edits = convertLLMHintsToEdits(
         {
           document: doc,
           hints,
@@ -210,7 +214,7 @@ describe('PrefixSuffix', () => {
         docText,
       );
 
-      const hints: PrefixSuffix.LLMHint[] = [
+      const hints: LLMHint[] = [
         {
           prefix: 'const y = ',
           existing: '10',
@@ -220,7 +224,7 @@ describe('PrefixSuffix', () => {
         },
       ];
 
-      const edits = PrefixSuffix.convertLLMHintsToEdits(
+      const edits = convertLLMHintsToEdits(
         {
           document: doc,
           hints,
@@ -240,7 +244,7 @@ describe('PrefixSuffix', () => {
         docText,
       );
 
-      const hints: PrefixSuffix.LLMHint[] = [
+      const hints: LLMHint[] = [
         {
           prefix: 'x = ',
           existing: '1',
@@ -250,7 +254,7 @@ describe('PrefixSuffix', () => {
         },
       ];
 
-      const edits = PrefixSuffix.convertLLMHintsToEdits(
+      const edits = convertLLMHintsToEdits(
         {
           document: doc,
           hints,

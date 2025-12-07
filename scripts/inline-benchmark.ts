@@ -1,8 +1,16 @@
 #!/usr/bin/env bun
 import fs from 'fs';
 import path from 'path';
-import { InlineCompletion } from '../src/inline-completion';
-import { Provider, Model } from '../src/provider';
+import {
+  generateCompletion,
+  type Options,
+  type Result,
+} from '../src/inline-completion';
+import {
+  create as createProvider,
+  parseModelString,
+  type Model,
+} from '../src/provider';
 import { autoDetectFimTemplate } from '../src/inline-completion/fim-formats';
 import type { LanguageModel } from 'ai';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -140,12 +148,12 @@ interface TestCaseResults {
   results: Map<ApproachType, RunMetrics[]>;
 }
 
-async function generateCompletion(opts: {
+async function runCompletionForTestCase(opts: {
   approach: ApproachType;
   model: LanguageModel;
   testCase: TestCase;
   modelName: string;
-}): Promise<InlineCompletion.Result> {
+}): Promise<Result> {
   const { approach, model, testCase, modelName } = opts;
 
   // Create a fake document with before+after content
@@ -166,7 +174,7 @@ async function generateCompletion(opts: {
     position: document.positionAt(offset),
   };
 
-  return InlineCompletion.generate({
+  return generateCompletion({
     model,
     document,
     position,
@@ -176,7 +184,7 @@ async function generateCompletion(opts: {
       fimFormat: autoDetectFimTemplate(modelName),
       maxTokens: 256,
     }),
-  } as InlineCompletion.Options);
+  } as Options);
 }
 
 async function runSingleBenchmark(opts: {
@@ -184,7 +192,7 @@ async function runSingleBenchmark(opts: {
   testCase: TestCase;
   runNum: number;
   totalRuns: number;
-  model: Model.Model;
+  model: Model;
   preview: boolean;
   critic: boolean;
   criticModel: string;
@@ -208,7 +216,7 @@ async function runSingleBenchmark(opts: {
   let parseErrorType: ParseErrorType = 'none';
 
   try {
-    const result = await generateCompletion({
+    const result = await runCompletionForTestCase({
       approach,
       model: model.model,
       testCase,
@@ -331,8 +339,8 @@ async function runApproachBenchmark(opts: {
   );
 
   const runMetrics: RunMetrics[] = [];
-  const { provider, modelName } = Provider.parseModelString(modelStr);
-  const factory = await Provider.create({
+  const { provider, modelName } = parseModelString(modelStr);
+  const factory = await createProvider({
     provider,
     log: NOOP_LOG,
   });

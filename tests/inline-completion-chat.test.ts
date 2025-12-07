@@ -1,7 +1,7 @@
 /**
  * Unit tests for Chat-based inline completion
  *
- * Tests the Chat.generate() function with mock models.
+ * Tests the generateChat() function with mock models.
  * Covers:
  * - Basic chat completion generation
  * - JSON parsing and validation
@@ -12,12 +12,12 @@
 import { describe, it, expect } from 'bun:test';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
-import { Chat } from '../src/inline-completion/chat';
-import { InlineCompletion } from '../src/inline-completion';
+import { generate as generateChat } from '../src/inline-completion/chat';
+import { generateCompletion } from '../src/inline-completion';
 import { NOOP_LOG } from '../src/util';
 import { createMockModel } from './helpers/mock-core';
 
-describe('Chat.generate', () => {
+describe('generateChat', () => {
   const testDoc = TextDocument.create(
     'file:///test.ts',
     'typescript',
@@ -38,7 +38,7 @@ describe('Chat.generate', () => {
       ]);
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -57,7 +57,7 @@ describe('Chat.generate', () => {
       const response = JSON.stringify([{ text: 'completion' }]);
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -77,7 +77,7 @@ describe('Chat.generate', () => {
       ]);
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -104,7 +104,7 @@ describe('Chat.generate', () => {
       ]);
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -126,7 +126,7 @@ describe('Chat.generate', () => {
       ]);
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -141,7 +141,7 @@ describe('Chat.generate', () => {
       const response = JSON.stringify([]);
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -158,7 +158,7 @@ describe('Chat.generate', () => {
       const response = 'this is not valid JSON {[}';
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -173,7 +173,7 @@ describe('Chat.generate', () => {
       const response = JSON.stringify({ text: 'not an array' });
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -187,7 +187,7 @@ describe('Chat.generate', () => {
     it('should handle empty response text', async () => {
       const model = createMockModel({ response: '' });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -201,7 +201,7 @@ describe('Chat.generate', () => {
     it('should handle model errors gracefully', async () => {
       const model = createMockModel({ throwError: true });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: testDoc,
@@ -230,7 +230,7 @@ describe('Chat.generate', () => {
       const response = JSON.stringify([{ text: 'a + b' }]);
       const model = createMockModel({ response });
 
-      const result = await Chat.generate({
+      const result = await generateChat({
         prompt: 'chat',
         model,
         document: doc,
@@ -251,7 +251,7 @@ describe('Chat.generate', () => {
       const model = createMockModel({ response: chatResponse });
 
       // Test default (no prompt specified)
-      const result1 = await InlineCompletion.generate({
+      const result1 = await generateCompletion({
         model,
         document: testDoc,
         position: testPosition,
@@ -261,7 +261,7 @@ describe('Chat.generate', () => {
       expect(result1.completions?.[0]?.text).toBe('chat_completion');
 
       // Test explicit prompt="chat"
-      const result2 = await InlineCompletion.generate({
+      const result2 = await generateCompletion({
         prompt: 'chat',
         model,
         document: testDoc,

@@ -2,11 +2,11 @@ import { describe, it, expect } from 'bun:test';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { Position, CompletionItem } from 'vscode-languageserver/node';
 import { extractPartialWord } from '../src/completion-utils';
-import type { InlineCompletion } from '../src/inline-completion';
+import type { Completion } from '../src/inline-completion';
 
 describe('CompletionItem generation', () => {
   it('should create proper fullText by prepending partial word', () => {
-    const mockCompletion: InlineCompletion.Completion = {
+    const mockCompletion: Completion = {
       text: 'nst value = 42;',
       reason: 'complete statement',
     };
@@ -18,7 +18,7 @@ describe('CompletionItem generation', () => {
   });
 
   it('should handle method completion correctly', () => {
-    const mockCompletion: InlineCompletion.Completion = {
+    const mockCompletion: Completion = {
       text: 'oor(5)',
       reason: 'complete method call',
     };
@@ -30,7 +30,7 @@ describe('CompletionItem generation', () => {
   });
 
   it('should handle empty partial word', () => {
-    const mockCompletion: InlineCompletion.Completion = {
+    const mockCompletion: Completion = {
       text: 'console.log("hello")',
       reason: 'add logging',
     };
@@ -54,7 +54,7 @@ describe('CompletionItem generation', () => {
       doc,
       position,
     );
-    const mockCompletion: InlineCompletion.Completion = {
+    const mockCompletion: Completion = {
       text: 'nst value = 42;',
       reason: 'complete',
     };
@@ -98,7 +98,7 @@ describe('CompletionItem generation', () => {
   });
 
   it('should handle multiline completions', () => {
-    const mockCompletion: InlineCompletion.Completion = {
+    const mockCompletion: Completion = {
       text: 'unction test() {\n  return 42;\n}',
       reason: 'complete function',
     };
