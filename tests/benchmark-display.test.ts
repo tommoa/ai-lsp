@@ -9,6 +9,7 @@ import {
   buildBenchmarkModelMetrics,
   buildInlineApproachMetrics,
   buildInlineModelMetrics,
+  type BenchmarkApproachSummary,
 } from '../scripts/benchmark-utils';
 
 describe('shortenModelName', () => {
@@ -124,15 +125,20 @@ describe('printComparisonTable', () => {
       { name: 'approach2', score: 90, time: 120 },
     ];
 
+    interface TestItem {
+      name: string;
+      score: number;
+      time: number;
+    }
     const metrics = [
       {
         name: 'Score',
-        getValue: (item: any) => item.score,
+        getValue: (item: TestItem) => item.score,
         higherIsBetter: true,
       },
       {
         name: 'Time (ms)',
-        getValue: (item: any) => item.time,
+        getValue: (item: TestItem) => item.time,
         higherIsBetter: false,
       },
     ];
@@ -145,7 +151,9 @@ describe('printComparisonTable', () => {
 
   it('should not print for single item', () => {
     const items = [{ name: 'only', value: 42 }];
-    const metrics = [{ name: 'Value', getValue: (item: any) => item.value }];
+    const metrics = [
+      { name: 'Value', getValue: (item: { value: number }) => item.value },
+    ];
 
     // Should not print for < 2 items
     expect(() => {
@@ -195,7 +203,7 @@ describe('metric builders', () => {
       parseSuccessRate: 95.5,
       avgHintsPerRun: 2.5,
       avgConversionRate: 90.0,
-    };
+    } as BenchmarkApproachSummary;
 
     for (const metric of metrics) {
       const value = metric.getValue(testData);

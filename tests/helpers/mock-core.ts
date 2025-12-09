@@ -118,12 +118,12 @@ export function createMockModel(config: MockModelConfig = {}): LanguageModelV2 {
     modelId: 'test-model',
     supportedUrls: {},
 
-    async doGenerate(_options: LanguageModelV2CallOptions) {
+    doGenerate(_options: LanguageModelV2CallOptions) {
       if (throwError) {
         throw new Error(errorMessage);
       }
 
-      return {
+      return Promise.resolve({
         content: [
           {
             type: 'text' as const,
@@ -133,11 +133,11 @@ export function createMockModel(config: MockModelConfig = {}): LanguageModelV2 {
         finishReason: 'stop' as const,
         usage,
         warnings: [],
-      };
+      });
     },
-    // NOTE: We return `any` so that we don't need to implement `doStream()`
-    // here.
-  } as any;
+    // NOTE: We cast to LanguageModelV2 so that we don't need to implement
+    // `doStream()` here.
+  } as unknown as LanguageModelV2;
 }
 
 /**

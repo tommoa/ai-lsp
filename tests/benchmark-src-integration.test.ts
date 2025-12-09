@@ -25,17 +25,26 @@ import {
   classifyParseError,
   extractTokenMetricArrays,
 } from '../scripts/benchmark-utils';
-import { NOOP_LOG } from '../src/util';
+import { NOOP_LOG, type TokenUsage } from '../src/util';
 import { mockResponses } from './helpers/mock-responses';
 import { createMockModel } from './helpers/mock-core';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
+
+/**
+ * Edit structure returned by generateEdit
+ */
+interface Edit {
+  range: { start: unknown; end: unknown };
+  text: string;
+  textDocument: unknown;
+}
 
 /**
  * Helper: Create a TextDocument for testing
  */
 function createTestDocument(
   content: string,
-  languageId: string = 'typescript',
+  languageId = 'typescript',
 ): TextDocument {
   return TextDocument.create('file:///test/file.ts', languageId, 1, content);
 }
@@ -43,7 +52,7 @@ function createTestDocument(
 /**
  * Helper: Verify standard edit structure
  */
-function verifyEditStructure(edit: any) {
+function verifyEditStructure(edit: Edit) {
   expect(edit).toHaveProperty('range');
   expect(edit).toHaveProperty('range.start');
   expect(edit).toHaveProperty('range.end');
@@ -55,7 +64,7 @@ function verifyEditStructure(edit: any) {
 /**
  * Helper: Verify token usage and cost calculation
  */
-function verifyTokenUsageAndCost(tokenUsage: any) {
+function verifyTokenUsageAndCost(tokenUsage: TokenUsage) {
   expect(tokenUsage).toBeDefined();
   expect(tokenUsage).toHaveProperty('input');
   expect(tokenUsage).toHaveProperty('output');
@@ -407,11 +416,11 @@ describe('Benchmark Script Smoke Tests', () => {
       let stdout = '';
       let stderr = '';
 
-      proc.stdout?.on('data', data => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
-      proc.stderr?.on('data', data => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
 
@@ -469,11 +478,11 @@ describe('Benchmark Script Smoke Tests', () => {
       let stdout = '';
       let stderr = '';
 
-      proc.stdout?.on('data', data => {
+      proc.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
-      proc.stderr?.on('data', data => {
+      proc.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
 

@@ -8,7 +8,7 @@
  */
 
 import {
-  Log,
+  type Log,
   time,
   type TokenUsage,
   extractTokenUsage,
@@ -33,13 +33,13 @@ import PROMPT from '../../prompt/next-edit.txt';
  * - `text`: replacement text
  * - `reason`: optional human-readable rationale
  */
-export type LLMHint = {
+export interface LLMHint {
   prefix: string;
   existing: string;
   suffix: string;
   text: string;
   reason?: string;
-};
+}
 
 export interface Options extends BaseOptions {
   prompt: 'prefix-suffix';

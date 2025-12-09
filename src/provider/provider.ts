@@ -215,7 +215,7 @@ async function resolveManifest(
 
   const manifest = {
     ...DefaultManifest[provider],
-    ...(index?.[provider] as Manifest | undefined),
+    ...index?.[provider],
   };
 
   if (!manifest.id) return undefined;
@@ -236,7 +236,7 @@ async function loadModule(
   // Try to import the module first
   try {
     // NOTE: We need to await here for the try/catch to fire.
-    return await import(moduleSpecifier);
+    return (await import(moduleSpecifier)) as Record<string, unknown>;
   } catch {
     // If import failed and installs are disabled, bail out
     if (!allowInstall) {
@@ -261,7 +261,7 @@ async function loadModule(
 
     // Try importing again after installation. If this doesn't work, we'll get
     // the generic Bun import error.
-    return import(moduleSpecifier);
+    return import(moduleSpecifier) as Promise<Record<string, unknown>>;
   }
 }
 

@@ -7,7 +7,7 @@ import { mockResponses } from '../helpers/mock-responses';
 describe('E2E: Inline Completion with FIM', () => {
   let client: LSPTestClient;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     client = createTestClient({
       debug: false,
       timeout: 10000,

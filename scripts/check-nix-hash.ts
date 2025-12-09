@@ -28,9 +28,11 @@ try {
 }
 
 // Read current hash
-let currentHash;
+let currentHash: string;
 try {
-  const hashesData = JSON.parse(readFileSync(hashesFile, 'utf-8'));
+  const hashesData = JSON.parse(readFileSync(hashesFile, 'utf-8')) as {
+    nodeModules: string;
+  };
   currentHash = hashesData.nodeModules;
 } catch {
   console.error('❌ Error: nix/hashes.json not found or invalid');
@@ -40,7 +42,7 @@ try {
 /**
  * Try to build and extract hash from error if mismatch occurs
  */
-async function tryBuild(useRebuild: boolean): Promise<string | null | 'retry'> {
+async function tryBuild(useRebuild: boolean): Promise<string | null> {
   const buildCmd = useRebuild
     ? $`nix build .#default.node_modules --no-link --rebuild`
     : $`nix build .#default.node_modules --no-link`;
@@ -48,11 +50,12 @@ async function tryBuild(useRebuild: boolean): Promise<string | null | 'retry'> {
   try {
     await buildCmd.cwd(projectRoot).quiet();
     return null; // Build succeeded - hash is correct
-  } catch (error: any) {
-    const output = [error.stderr, error.stdout].filter(Boolean).join('\n');
+  } catch (error: unknown) {
+    const err = error as { stderr?: string; stdout?: string };
+    const output = [err.stderr, err.stdout].filter(Boolean).join('\n');
 
     // Extract hash from mismatch error
-    const hashMatch = output.match(/got:\s+(sha256-[A-Za-z0-9+/=]+)/);
+    const hashMatch = /got:\s+(sha256-[A-Za-z0-9+/=]+)/.exec(output);
     if (hashMatch) {
       return hashMatch[1]!;
     }
@@ -116,9 +119,10 @@ try {
   // Hash is correct
   console.log('✓ Nix node_modules hash is up-to-date');
   process.exit(0);
-} catch (error: any) {
+} catch (error: unknown) {
   // For unexpected errors, warn locally but fail in CI
-  const output = String(error.stderr || error.stdout || error.message || '');
+  const err = error as { stderr?: string; stdout?: string; message?: string };
+  const output = String(err.stderr ?? err.stdout ?? err.message ?? '');
   const errorLines = output.trim().split('\n').slice(-5).join('\n');
 
   if (isCI) {

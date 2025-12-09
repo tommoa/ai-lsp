@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, afterAll } from 'bun:test';
+import type { Log } from '../src/util';
 import {
   parseModelString,
   create as createProvider,
@@ -6,6 +7,19 @@ import {
 } from '../src/provider';
 
 const originalFetch = globalThis.fetch;
+
+/**
+ * Helper to mock globalThis.fetch for testing
+ */
+function mockFetch(
+  handler: () => Promise<{
+    ok: boolean;
+    status?: number;
+    json?: () => unknown;
+  }>,
+): void {
+  globalThis.fetch = handler as unknown as typeof fetch;
+}
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -51,17 +65,18 @@ describe('parseModelString', () => {
 describe('createProvider', () => {
   it('should load provider using models.dev manifest', async () => {
     // Mock models.dev to return manifest for mock provider
-    (globalThis as any).fetch = async () =>
-      ({
+    mockFetch(() =>
+      Promise.resolve({
         ok: true,
-        json: async () => ({
+        json: () => ({
           mock: {
             id: 'mock',
             npm: 'ai-lsp-mock-provider',
             env: ['MOCK_API_KEY'],
           },
         }),
-      }) as any;
+      }),
+    );
 
     // Should successfully load using only models.dev data + defaults
     const sel = await createProvider({
@@ -75,21 +90,21 @@ describe('createProvider', () => {
 
   it('should fallback when models.dev unavailable', async () => {
     const messages: string[] = [];
-    const notify = (level: any, msg: string) =>
-      messages.push(`${level}:${msg}`);
+    const notify: Log = (level, msg) => messages.push(`${level}:${msg}`);
 
-    (globalThis as any).fetch = async () =>
-      ({
+    mockFetch(() =>
+      Promise.resolve({
         ok: false,
         status: 500,
-      }) as any;
+      }),
+    );
 
     const sel = await createProvider({
       provider: 'mock',
       providers: {
         mock: { response: 'test response' },
       },
-      log: notify as any,
+      log: notify,
       allowInstall: false,
     });
 
@@ -106,7 +121,7 @@ describe('createProvider', () => {
       // If the package is installed, this should succeed and use the subpath
       const sel1 = await createProvider({
         provider: 'google-vertex-anthropic',
-        log: notify as any,
+        log: notify as Log,
         allowInstall: false,
       });
       expect(typeof sel1).toBe('function');
@@ -170,16 +185,16 @@ describe('createProvider', () => {
   });
 
   it('should handle network errors gracefully', async () => {
-    (globalThis as any).fetch = async () => {
+    globalThis.fetch = (() => {
       throw new Error('Network error');
-    };
+    }) as unknown as typeof fetch;
 
     const sel = await createProvider({
       provider: 'mock',
       providers: {
         mock: { response: 'test response' },
       },
-      log: (level: any, message: string) => console.log(level, message),
+      log: (level, message) => console.log(level, message),
       allowInstall: false,
     });
 
@@ -187,7 +202,7 @@ describe('createProvider', () => {
     expect(typeof sel).toBe('function');
   });
 
-  it('should throw if the provider is ill-defined', async () => {
+  it('should throw if the provider is ill-defined', () => {
     // Provider with no definitions.
     expect(
       createProvider({
@@ -233,7 +248,7 @@ describe('createProvider', () => {
     ).rejects.toThrow('Command failed: bun install @ai-sdk/fake@latest');
   });
 
-  it('should throw when provider package has no @ai-sdk api', async () => {
+  it('should throw when provider package has no @ai-sdk api', () => {
     // Provider package exists but doesn't export a createXXX function
     expect(
       createProvider({

@@ -26,7 +26,7 @@ export interface LSPTestClientOptions {
   /** Working directory for the server process */
   cwd?: string;
   /** Initialization options to pass to the server */
-  initializationOptions?: any;
+  initializationOptions?: Record<string, unknown>;
   /** Timeout for requests in milliseconds (default: 5000) */
   timeout?: number;
   /** Whether to log LSP messages for debugging */
@@ -41,7 +41,7 @@ export interface CopilotInlineEdit {
   range: { start: Position; end: Position };
   text: string;
   reason?: string;
-  command?: any;
+  command?: unknown;
   uuid?: string;
 }
 
@@ -94,7 +94,7 @@ export class LSPTestClient {
   private process: ChildProcess | null = null;
   private connection: MessageConnection | null = null;
   private documents = new Map<string, TextDocument>();
-  private messageLog: Array<{ direction: string; method: string; data: any }> =
+  private messageLog: { direction: string; method: string; data: unknown }[] =
     [];
   private options: Required<LSPTestClientOptions>;
 
@@ -132,7 +132,7 @@ export class LSPTestClient {
     method: string,
     uri: string,
     position: Position,
-    extraParams?: Record<string, any>,
+    extraParams?: Record<string, unknown>,
   ): Promise<T> {
     const params = {
       textDocument: { uri, version: 1 },
@@ -365,7 +365,7 @@ export class LSPTestClient {
   /**
    * Update server configuration dynamically
    */
-  async changeConfiguration(settings: any): Promise<void> {
+  async changeConfiguration(settings: Record<string, unknown>): Promise<void> {
     await this.sendNotification('workspace/didChangeConfiguration', {
       settings,
     });
@@ -392,7 +392,7 @@ export class LSPTestClient {
   /**
    * Send a custom request to the server
    */
-  async sendRequest<T = any>(method: string, params: any): Promise<T> {
+  async sendRequest<T = unknown>(method: string, params: unknown): Promise<T> {
     const connection = this.ensureConnection();
 
     return this.withTimeout<T>(
@@ -407,7 +407,7 @@ export class LSPTestClient {
   /**
    * Send a notification to the server (no response expected)
    */
-  async sendNotification(method: string, params: any): Promise<void> {
+  async sendNotification(method: string, params: unknown): Promise<void> {
     const connection = this.ensureConnection();
 
     this.log('send', method, params);
@@ -424,7 +424,7 @@ export class LSPTestClient {
   /**
    * Get all message logs (useful for debugging)
    */
-  getMessageLog(): Array<{ direction: string; method: string; data: any }> {
+  getMessageLog(): { direction: string; method: string; data: unknown }[] {
     return [...this.messageLog];
   }
 
@@ -445,7 +445,11 @@ export class LSPTestClient {
   /**
    * Internal logging method
    */
-  private log(direction: 'send' | 'receive', method: string, data: any): void {
+  private log(
+    direction: 'send' | 'receive',
+    method: string,
+    data: unknown,
+  ): void {
     if (this.options.debug) {
       const truncated =
         JSON.stringify(data).length > 200

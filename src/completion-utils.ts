@@ -2,7 +2,7 @@
  * Utilities for inline completion handling.
  */
 
-import { TextDocument } from 'vscode-languageserver-textdocument';
+import { type TextDocument } from 'vscode-languageserver-textdocument';
 import type { Position } from 'vscode-languageserver/node';
 
 /**
@@ -31,7 +31,7 @@ export function extractPartialWord(
 
   // Match word characters, dots, and common identifier characters
   // This regex captures the last "word" which may include dots for method calls
-  const match = lineText.match(/[\w.]*$/);
+  const match = /[\w.]*$/.exec(lineText);
   const partial = match ? match[0] : '';
   const startChar = lineText.length - partial.length;
 

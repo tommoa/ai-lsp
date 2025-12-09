@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'bun:test';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import type { Position, CompletionItem } from 'vscode-languageserver/node';
+import type {
+  Position,
+  CompletionItem,
+  TextEdit,
+} from 'vscode-languageserver/node';
 import { extractPartialWord } from '../src/completion-utils';
 import type { Completion } from '../src/inline-completion';
 
@@ -61,39 +65,40 @@ describe('CompletionItem generation', () => {
     const fullText = partialWord + mockCompletion.text;
 
     // Simulate completion item creation
+    const textEdit: TextEdit = {
+      range: {
+        start: { line: position.line, character: startChar },
+        end: position,
+      },
+      newText: fullText,
+    };
     const item: CompletionItem = {
       label: fullText,
       kind: 1, // CompletionItemKind.Text
-      textEdit: {
-        range: {
-          start: { line: position.line, character: startChar },
-          end: position,
-        },
-        newText: fullText,
-      } as any,
+      textEdit,
     };
 
-    const textEdit = item.textEdit as any;
     expect(textEdit.range.start.character).toBe(6);
     expect(textEdit.range.end.character).toBe(8);
     expect(textEdit.newText).toBe('const value = 42;');
+    expect(item.label).toBe(fullText);
   });
 
   it('should have matching label and newText', () => {
     const fullText = 'const value = 42;';
+    const textEdit: TextEdit = {
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 2 },
+      },
+      newText: fullText,
+    };
     const item: CompletionItem = {
       label: fullText,
       kind: 1,
-      textEdit: {
-        range: {
-          start: { line: 0, character: 0 },
-          end: { line: 0, character: 2 },
-        },
-        newText: fullText,
-      } as any,
+      textEdit,
     };
 
-    const textEdit = item.textEdit as any;
     expect(item.label).toBe(textEdit.newText);
   });
 

@@ -92,4 +92,5 @@ class DataProcessor {
   }
 }
 
-export { DataProcessor, DataPoint, ProcessingOptions };
+export { DataProcessor };
+export type { DataPoint, ProcessingOptions };

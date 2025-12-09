@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { generateEdit } from '../src/next-edit';
 import { generateCompletion } from '../src/inline-completion';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -29,15 +30,15 @@ import { mockResponses } from './helpers/mock-responses';
 /**
  * Helper: Create a mock model that returns invalid schema
  */
-function createInvalidSchemaMockModel() {
+function createInvalidSchemaMockModel(): LanguageModelV2 {
   return {
     specificationVersion: 'v2' as const,
     provider: 'mock',
     modelId: 'test-model',
     supportedUrls: {},
 
-    async doGenerate() {
-      return {
+    doGenerate() {
+      return Promise.resolve({
         content: [
           {
             type: 'text' as const,
@@ -56,18 +57,18 @@ function createInvalidSchemaMockModel() {
           totalTokens: 150,
         },
         warnings: [],
-      };
+      });
     },
 
-    async doStream() {
+    doStream() {
       const stream = new ReadableStream({
         start(controller) {
           controller.close();
         },
       });
-      return { stream, warnings: [] };
+      return Promise.resolve({ stream, warnings: [] });
     },
-  } as any;
+  } as unknown as LanguageModelV2;
 }
 
 function createTestDocument(content: string): TextDocument {
@@ -156,14 +157,14 @@ describe('Error Classification - NextEdit', () => {
    * classification for conversion failures
    */
   it('should handle errors during edit conversion', async () => {
-    const malformedPrefixSuffixModel = {
+    const malformedPrefixSuffixModel: LanguageModelV2 = {
       specificationVersion: 'v2' as const,
       provider: 'mock',
       modelId: 'test-model',
       supportedUrls: {},
 
-      async doGenerate() {
-        return {
+      doGenerate() {
+        return Promise.resolve({
           content: [
             {
               type: 'text' as const,
@@ -184,18 +185,18 @@ describe('Error Classification - NextEdit', () => {
             totalTokens: 150,
           },
           warnings: [],
-        };
+        });
       },
 
-      async doStream() {
+      doStream() {
         const stream = new ReadableStream({
           start(controller) {
             controller.close();
           },
         });
-        return { stream, warnings: [] };
+        return Promise.resolve({ stream, warnings: [] });
       },
-    } as any;
+    } as unknown as LanguageModelV2;
 
     const doc = createTestDocument('function test() {}');
 
@@ -304,12 +305,12 @@ describe('Error Aggregation - parseErrorBreakdown', () => {
    * incorrect parseErrorBreakdown statistics
    */
   it('should aggregate multiple error types correctly', () => {
-    const errors: Array<
+    const errors: (
       | 'json_parse'
       | 'schema_invalid'
       | 'conversion_failed'
       | 'generation_failed'
-    > = [
+    )[] = [
       'json_parse',
       'json_parse',
       'schema_invalid',

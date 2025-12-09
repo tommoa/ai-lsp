@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import {
   createConnection,
-  CompletionItem,
+  type CompletionItem,
   CompletionItemKind,
   ProposedFeatures,
   type TextDocumentPositionParams,
@@ -17,7 +17,7 @@ import {
   parseModelString,
   type Config as ProviderConfig,
   type Selector,
-  Model,
+  type Model,
 } from './provider';
 import {
   generateCompletion,
@@ -25,7 +25,7 @@ import {
 } from './inline-completion';
 import { generateEdit, type Options as NextEditOptions } from './next-edit';
 import { extractPartialWord } from './completion-utils';
-import { Level, Log, time } from './util';
+import { type Level, type Log, time } from './util';
 import {
   autoDetectFimTemplate,
   BUILTIN_FIM_TEMPLATES,
@@ -47,9 +47,7 @@ function resolveFimTemplate(
     return configFormat;
   }
   if (typeof configFormat === 'string') {
-    return (
-      BUILTIN_FIM_TEMPLATES[configFormat] ?? BUILTIN_FIM_TEMPLATES['openai']!
-    );
+    return BUILTIN_FIM_TEMPLATES[configFormat] ?? BUILTIN_FIM_TEMPLATES.openai!;
   }
   return autoDetectFimTemplate(modelId);
 }
@@ -58,7 +56,10 @@ function resolveFimTemplate(
 // top-level functions.
 // Selected provider selector (resolves model id to a concrete model
 // representation for `generateText`). Can be replaced during init.
-let provider: Selector = (model: string) => model as any;
+let provider: Selector = (model: string) => ({
+  model: model as unknown as Model['model'],
+  info: undefined,
+});
 let SELECTED_MODEL: string | undefined = undefined;
 let WORKSPACE_ROOT_URI: string | null = null;
 
@@ -105,13 +106,13 @@ interface CompletionData {
 }
 
 const connection = createConnection(ProposedFeatures.all);
-const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
+const documents = new TextDocuments<TextDocument>(TextDocument);
 documents.listen(connection);
 
 const log: Log = (
   level: Level,
   message: string,
-  extra?: Record<string, any>,
+  extra?: Record<string, unknown>,
 ) => {
   const postfix = extra ? ` ${JSON.stringify(extra)}` : '';
   switch (level) {
@@ -130,12 +131,12 @@ const log: Log = (
   }
 };
 
-type ProviderInitResult = {
+interface ProviderInitResult {
   factory: Selector;
   provider: string;
   model: Model;
   modelId: string;
-};
+}
 
 async function initProvider(
   initOpts: InitOptions,
@@ -170,16 +171,16 @@ async function initProvider(
   }
 }
 
-async function initModeConfigs(
+function initModeConfigs(
   initOpts: InitOptions,
   globalProvider: Selector,
   globalModelId: string,
   log: Log,
-): Promise<void> {
+): void {
   // Initialize next-edit config
-  const nextEditOpts = initOpts.next_edit || {};
-  const nextEditModelId = nextEditOpts.model || globalModelId;
-  const nextEditPrompt = nextEditOpts.prompt || 'prefix-suffix';
+  const nextEditOpts = initOpts.next_edit ?? {};
+  const nextEditModelId = nextEditOpts.model ?? globalModelId;
+  const nextEditPrompt = nextEditOpts.prompt ?? 'prefix-suffix';
 
   type NextEditPrompt = NextEditOptions['prompt'];
 
@@ -190,7 +191,7 @@ async function initModeConfigs(
     'line-number',
   ];
   if (nextEditPromptValues.includes(nextEditPrompt)) {
-    validatedNextEditPrompt = nextEditPrompt as NextEditPrompt;
+    validatedNextEditPrompt = nextEditPrompt;
   } else {
     log('warn', `Invalid next_edit.prompt: ${nextEditPrompt}, using default`);
   }
@@ -208,9 +209,9 @@ async function initModeConfigs(
   );
 
   // Initialize inline-completion config
-  const inlineCompletionOpts = initOpts.inline_completion || {};
-  const inlineCompletionModelId = inlineCompletionOpts.model || globalModelId;
-  const inlineCompletionPrompt = inlineCompletionOpts.prompt || 'chat';
+  const inlineCompletionOpts = initOpts.inline_completion ?? {};
+  const inlineCompletionModelId = inlineCompletionOpts.model ?? globalModelId;
+  const inlineCompletionPrompt = inlineCompletionOpts.prompt ?? 'chat';
 
   type InlinePrompt = InlineCompletionOptions['prompt'];
 
@@ -218,7 +219,7 @@ async function initModeConfigs(
   let validatedInlinePrompt: InlinePrompt = 'chat';
   const inlineCompletionPromptValues: InlinePrompt[] = ['chat', 'fim'];
   if (inlineCompletionPromptValues.includes(inlineCompletionPrompt)) {
-    validatedInlinePrompt = inlineCompletionPrompt as InlinePrompt;
+    validatedInlinePrompt = inlineCompletionPrompt;
   } else {
     log(
       'warn',
@@ -234,13 +235,13 @@ async function initModeConfigs(
       inlineCompletionOpts.fim_format,
       inlineCompletionModelId,
     );
-    log('info', `FIM template: ${fimFormat.name || 'custom'}`);
+    log('info', `FIM template: ${fimFormat.name ?? 'custom'}`);
   }
 
   INLINE_COMPLETION_CONFIG = {
     model: globalProvider(inlineCompletionModelId),
     modelId: inlineCompletionModelId,
-    prompt: validatedInlinePrompt as InlineCompletionOptions['prompt'],
+    prompt: validatedInlinePrompt,
     fimFormat,
   };
 
@@ -254,7 +255,7 @@ async function initModeConfigs(
 connection.onInitialize(async (params: InitializeParams) => {
   log('info', 'LSP Server initializing...');
   WORKSPACE_ROOT_URI = params.rootUri;
-  const initOpts = params.initializationOptions || ({} as InitOptions);
+  const initOpts = (params.initializationOptions ?? {}) as InitOptions;
 
   const result = await (async () => {
     try {
@@ -263,7 +264,7 @@ connection.onInitialize(async (params: InitializeParams) => {
       SELECTED_MODEL = res.modelId;
 
       // Initialize mode-specific configs
-      await initModeConfigs(initOpts, provider, SELECTED_MODEL, log);
+      initModeConfigs(initOpts, provider, SELECTED_MODEL, log);
     } catch (err) {
       log('error', `Provider init failed: ${String(err)}`);
       throw err;
@@ -297,21 +298,23 @@ connection.onInitialized((_params: InitializedParams) => {
     );
   }
 
-  connection.onDidChangeConfiguration(async change => {
-    try {
-      const config = (change.settings || {}) as InitOptions;
+  connection.onDidChangeConfiguration(change => {
+    void (async () => {
+      try {
+        const config = (change.settings ?? {}) as InitOptions;
 
-      const res = await initProvider(config, log);
-      provider = res.factory;
-      SELECTED_MODEL = res.modelId;
+        const res = await initProvider(config, log);
+        provider = res.factory;
+        SELECTED_MODEL = res.modelId;
 
-      // Re-initialize mode configs
-      await initModeConfigs(config, provider, SELECTED_MODEL, log);
+        // Re-initialize mode configs
+        initModeConfigs(config, provider, SELECTED_MODEL, log);
 
-      log('info', 'Configuration updated successfully');
-    } catch (err) {
-      log('error', 'Error handling configuration change: ' + String(err));
-    }
+        log('info', 'Configuration updated successfully');
+      } catch (err) {
+        log('error', 'Error handling configuration change: ' + String(err));
+      }
+    })();
   });
 });
 
@@ -327,8 +330,7 @@ connection.onCompletion(
     const doc = documents.get(pos.textDocument.uri)!;
     let result;
     try {
-      const prompt =
-        INLINE_COMPLETION_CONFIG.prompt as InlineCompletionOptions['prompt'];
+      const prompt = INLINE_COMPLETION_CONFIG.prompt;
 
       result = await generateCompletion({
         model: INLINE_COMPLETION_CONFIG.model.model,
@@ -362,9 +364,9 @@ connection.onCompletion(
 
     // `completions` is an array of { text, reason } objects that need to be
     // mapped to CompletionItems.
-    const items: CompletionItem[] = (completions || [])
+    const items: CompletionItem[] = (completions ?? [])
       .map((c, index) => {
-        const text = c.text ?? String(c);
+        const text = c.text;
         const reason = c.reason ?? '';
 
         // Reconstruct the full text by prepending the partial word
@@ -408,8 +410,8 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
     'info',
     `onCompletionResolve called for item: ${item.label}`,
   );
-  const data = item.data as CompletionData;
-  if (data && data.model) {
+  const data = item.data as CompletionData | undefined;
+  if (data?.model) {
     item.detail = `${data.reason} (${data.model})`;
   }
   return item;

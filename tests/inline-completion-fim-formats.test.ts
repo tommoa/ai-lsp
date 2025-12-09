@@ -4,25 +4,26 @@ import {
   BUILTIN_FIM_TEMPLATES,
   autoDetectFimTemplate,
   type FimTemplate,
+  type FimContext,
 } from '../src/inline-completion/fim-formats';
 
 describe('FIM Templates', () => {
   describe('buildFimPrompt', () => {
     test('builds prompts for all built-in templates', () => {
       // OpenAI format
-      const openai = BUILTIN_FIM_TEMPLATES['openai']!;
+      const openai = BUILTIN_FIM_TEMPLATES.openai!;
       expect(
         buildFimPrompt(openai, { prefix: 'const x = ', suffix: ';' }),
       ).toBe('<fim_prefix>const x = <fim_suffix>;<fim_middle>');
 
       // CodeLlama format
-      const codellama = BUILTIN_FIM_TEMPLATES['codellama']!;
+      const codellama = BUILTIN_FIM_TEMPLATES.codellama!;
       expect(
         buildFimPrompt(codellama, { prefix: 'def foo(', suffix: '):' }),
       ).toBe('▁<PRE>def foo(▁<SUF>):▁<MID>');
 
       // Qwen format with metadata
-      const qwen = BUILTIN_FIM_TEMPLATES['qwen']!;
+      const qwen = BUILTIN_FIM_TEMPLATES.qwen!;
       const qwenPrompt = buildFimPrompt(qwen, {
         prefix: 'x = ',
         suffix: '\n',
@@ -33,7 +34,7 @@ describe('FIM Templates', () => {
       expect(qwenPrompt).toContain('<|file_path|>src/main.py');
 
       // DeepSeek format
-      const deepseek = BUILTIN_FIM_TEMPLATES['deepseek']!;
+      const deepseek = BUILTIN_FIM_TEMPLATES.deepseek!;
       expect(
         buildFimPrompt(deepseek, {
           prefix: 'def add(a, b):',
@@ -83,7 +84,7 @@ describe('FIM Templates', () => {
           prefix: 'code',
           suffix: '',
           name: 'override',
-        } as any),
+        } as FimContext & { name: string }),
       ).toBe('override: code');
     });
 

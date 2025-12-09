@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import fs from 'fs';
 import path from 'path';
-import { generateEdit } from '../src/next-edit';
+import { generateEdit, type LspEdit } from '../src/next-edit';
 import { create as createProvider, parseModelString } from '../src/provider';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
@@ -197,7 +197,7 @@ async function runApproachBenchmark(opts: {
       );
 
       const start = Date.now();
-      let edits: any[] = [];
+      let edits: LspEdit[] = [];
       let parseSuccess = false;
       let parseErrorType: ParseErrorType = 'none';
       let hintCount = 0;
@@ -287,9 +287,10 @@ async function runApproachBenchmark(opts: {
 
       // count valid hints (ones that have valid edits)
       validHintCount = edits.filter(e => {
-        if (e.start === undefined || e.end === undefined) return false;
-        const prevChar = doc[e.start - 1] ?? '';
-        const nextChar = doc[e.end] ?? '';
+        const startOffset = docObj.offsetAt(e.range.start);
+        const endOffset = docObj.offsetAt(e.range.end);
+        const prevChar = doc[startOffset - 1] ?? '';
+        const nextChar = doc[endOffset] ?? '';
         return !(prevChar === ' ' && nextChar === ' ');
       }).length;
 
@@ -376,7 +377,7 @@ function printComparisonTableLocal(
 }
 
 function printModelComparisonTable(
-  modelResults: Array<{ modelName: string; summary: ApproachSummary }>,
+  modelResults: { modelName: string; summary: ApproachSummary }[],
   approach: ApproachType,
   runs: number,
 ): void {
@@ -447,37 +448,36 @@ function exportResultsToJson(
   allResults: ModelResults[],
   exportPath: string,
 ): void {
-  const results = allResults.flatMap(modelData =>
-    modelData.summaries.map(summary => {
+  const results: Record<string, unknown> = {};
+
+  for (const modelData of allResults) {
+    for (const summary of modelData.summaries) {
       const runMetrics = modelData.results.get(summary.approach) ?? [];
       const { tokensInput, tokensOutput, costs } =
         extractTokenMetricArrays(runMetrics);
 
       const key = `${modelData.modelName}:${summary.approach}`;
-      return {
-        key,
-        value: {
-          modelName: modelData.modelName,
-          approach: summary.approach,
-          scores: runMetrics
-            .filter(r => r.score !== undefined)
-            .map(r => r.score!),
-          genLatencies: runMetrics.map(r => r.genLatency),
-          genTokensInput: tokensInput,
-          genTokensOutput: tokensOutput,
-          genCosts: costs,
-          // Summary statistics
-          avgScore: summary.avgScore,
-          genAvgMs: summary.genAvgMs,
-          genAvgInputTokens: summary.genAvgInputTokens,
-          genAvgOutputTokens: summary.genAvgOutputTokens,
-          genAvgCost: summary.genAvgCost,
-          valid: summary.valid,
-          parseSuccessRate: summary.parseSuccessRate,
-        },
+      results[key] = {
+        modelName: modelData.modelName,
+        approach: summary.approach,
+        scores: runMetrics
+          .filter(r => r.score !== undefined)
+          .map(r => r.score!),
+        genLatencies: runMetrics.map(r => r.genLatency),
+        genTokensInput: tokensInput,
+        genTokensOutput: tokensOutput,
+        genCosts: costs,
+        // Summary statistics
+        avgScore: summary.avgScore,
+        genAvgMs: summary.genAvgMs,
+        genAvgInputTokens: summary.genAvgInputTokens,
+        genAvgOutputTokens: summary.genAvgOutputTokens,
+        genAvgCost: summary.genAvgCost,
+        valid: summary.valid,
+        parseSuccessRate: summary.parseSuccessRate,
       };
-    }),
-  );
+    }
+  }
 
   exportBenchmarkResults(exportPath, results);
 }

@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import type { LanguageModelV2 } from '@ai-sdk/provider';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
 import { generate as generateFim } from '../src/inline-completion/fim';
@@ -22,6 +23,24 @@ import {
 import { NOOP_LOG } from '../src/util';
 import { createMockModel } from './helpers/mock-core';
 import { mockResponses } from './helpers/mock-responses';
+
+/**
+ * Create a mock model that throws an error
+ */
+function createThrowingMockModel(errorMessage: string): LanguageModelV2 {
+  return {
+    specificationVersion: 'v2' as const,
+    provider: 'mock',
+    modelId: 'test',
+    supportedUrls: {},
+    doGenerate() {
+      throw new Error(errorMessage);
+    },
+    doStream() {
+      throw new Error(errorMessage);
+    },
+  } as unknown as LanguageModelV2;
+}
 
 describe('generateFim', () => {
   describe('basic completion generation', () => {
@@ -44,14 +63,14 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.deepseek!,
         maxTokens: 256,
         workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
-      expect(result.completions![0]!.text).toBe(' sum');
-      expect(result.completions![0]!.reason).toBe('fim');
+      expect(result.completions[0]!.text).toBe(' sum');
+      expect(result.completions[0]!.reason).toBe('fim');
     });
 
     it('should include token usage in result', async () => {
@@ -73,7 +92,7 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['codellama']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.codellama!,
         workspaceRootUri: 'file:///test/workspace',
       });
 
@@ -100,12 +119,12 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.qwen!,
         workspaceRootUri: 'file:///test/workspace',
       });
 
       expect(result.completions).not.toBeEmpty();
-      expect(result.completions![0]!.text).toBe(' b;');
+      expect(result.completions[0]!.text).toBe(' b;');
     });
   });
 
@@ -129,7 +148,7 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.openai!,
         workspaceRootUri: 'file:///test/workspace',
       });
 
@@ -150,7 +169,7 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['codellama']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.codellama!,
         workspaceRootUri: 'file:///test/workspace',
       });
 
@@ -176,7 +195,7 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.deepseek!,
         workspaceRootUri: 'file:///test/workspace',
       });
 
@@ -203,7 +222,7 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['qwen']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.qwen!,
         workspaceRootUri: 'file:///test/workspace',
       });
 
@@ -224,18 +243,9 @@ describe('generateFim', () => {
         position: { line: 0, character: 10 },
       };
 
-      const badModel = {
-        specificationVersion: 'v2' as const,
-        provider: 'mock',
-        modelId: 'test',
-        supportedUrls: {},
-        async doGenerate() {
-          throw new Error('completion endpoint not implemented for this model');
-        },
-        async doStream() {
-          throw new Error('completion endpoint not implemented for this model');
-        },
-      } as any;
+      const badModel = createThrowingMockModel(
+        'completion endpoint not implemented for this model',
+      );
 
       try {
         await generateFim({
@@ -243,7 +253,7 @@ describe('generateFim', () => {
           model: badModel,
           document: doc,
           position,
-          fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+          fimFormat: BUILTIN_FIM_TEMPLATES.openai!,
           log: NOOP_LOG,
           workspaceRootUri: 'file:///test/workspace',
         });
@@ -267,18 +277,7 @@ describe('generateFim', () => {
         position: { line: 0, character: 10 },
       };
 
-      const errorModel = {
-        specificationVersion: 'v2' as const,
-        provider: 'mock',
-        modelId: 'test',
-        supportedUrls: {},
-        async doGenerate() {
-          throw new Error('Network timeout occurred');
-        },
-        async doStream() {
-          throw new Error('Network timeout occurred');
-        },
-      } as any;
+      const errorModel = createThrowingMockModel('Network timeout occurred');
 
       try {
         await generateFim({
@@ -286,7 +285,7 @@ describe('generateFim', () => {
           model: errorModel,
           document: doc,
           position,
-          fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+          fimFormat: BUILTIN_FIM_TEMPLATES.openai!,
           log: NOOP_LOG,
           workspaceRootUri: 'file:///test/workspace',
         });
@@ -329,7 +328,7 @@ describe('generateFim', () => {
       });
 
       expect(result.completions).not.toBeEmpty();
-      expect(result.completions![0]!.text).toBe('"Hello, world!"');
+      expect(result.completions[0]!.text).toBe('"Hello, world!"');
     });
 
     it('should use custom template defaults', async () => {
@@ -360,7 +359,7 @@ describe('generateFim', () => {
       });
 
       expect(result.completions).not.toBeEmpty();
-      expect(result.completions![0]!.text).toBe('42');
+      expect(result.completions[0]!.text).toBe('42');
     });
   });
 
@@ -384,7 +383,7 @@ describe('generateFim', () => {
         document: doc,
         position,
         log: NOOP_LOG,
-        fimFormat: BUILTIN_FIM_TEMPLATES['deepseek']!,
+        fimFormat: BUILTIN_FIM_TEMPLATES.deepseek!,
         workspaceRootUri: 'file:///test/workspace',
       });
 
@@ -404,18 +403,9 @@ describe('generateFim', () => {
         position: { line: 0, character: 10 },
       };
 
-      const badModel = {
-        specificationVersion: 'v2' as const,
-        provider: 'mock',
-        modelId: 'test',
-        supportedUrls: {},
-        async doGenerate() {
-          throw new Error('completion endpoint not implemented');
-        },
-        async doStream() {
-          throw new Error('completion endpoint not implemented');
-        },
-      } as any;
+      const badModel = createThrowingMockModel(
+        'completion endpoint not implemented',
+      );
 
       try {
         await generateCompletion({
@@ -424,7 +414,7 @@ describe('generateFim', () => {
           document: doc,
           position,
           log: NOOP_LOG,
-          fimFormat: BUILTIN_FIM_TEMPLATES['openai']!,
+          fimFormat: BUILTIN_FIM_TEMPLATES.openai!,
           workspaceRootUri: 'file:///test/workspace',
         });
         expect.unreachable('Should have thrown UnsupportedPromptError');

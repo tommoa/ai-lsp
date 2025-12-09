@@ -104,7 +104,7 @@ export function autoDetectFimTemplate(modelName: string): FimTemplate {
   }
 
   // Default to OpenAI format (most common)
-  return BUILTIN_FIM_TEMPLATES['openai']!;
+  return BUILTIN_FIM_TEMPLATES.openai!;
 }
 
 /**

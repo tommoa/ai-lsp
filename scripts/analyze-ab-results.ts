@@ -35,13 +35,13 @@ function parseArgs(): Record<string, string | undefined> {
   return out;
 }
 
-type _AnalysisData = {
+interface BenchmarkResult {
   scores: number[];
   genLatencies: number[];
   genTokensInput: number[];
   genTokensOutput: number[];
   genCosts: number[];
-};
+}
 
 function mean(arr: number[]): number {
   if (arr.length === 0) return NaN;
@@ -108,7 +108,7 @@ function tTest(
   return { t, significant: pValue < 0.05 };
 }
 
-function printStats(label: string, data: number[], unit: string = ''): void {
+function printStats(label: string, data: number[], unit = ''): void {
   if (data.length === 0) {
     console.log(`${label}: N/A (no data)`);
     return;
@@ -138,16 +138,16 @@ function main(): void {
   const args = parseArgs();
   if (!args.results) usage();
 
-  const resultsPath = path.resolve(args.results as string);
+  const resultsPath = path.resolve(args.results!);
   if (!fs.existsSync(resultsPath)) {
     console.error(`File not found: ${resultsPath}`);
     process.exit(1);
   }
 
   const content = fs.readFileSync(resultsPath, 'utf8');
-  let rawResults: Record<string, any>;
+  let rawResults: Record<string, BenchmarkResult>;
   try {
-    rawResults = JSON.parse(content);
+    rawResults = JSON.parse(content) as Record<string, BenchmarkResult>;
   } catch (e) {
     console.error('Failed to parse JSON:', String(e));
     process.exit(1);

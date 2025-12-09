@@ -8,7 +8,7 @@
  */
 
 import {
-  Log,
+  type Log,
   time,
   type TokenUsage,
   extractTokenUsage,
@@ -32,12 +32,12 @@ import PROMPT from '../../prompt/next-edit-linenum.txt';
  * - `text`: replacement text (may span multiple lines)
  * - `reason`: optional human-readable rationale
  */
-export type LLMHint = {
+export interface LLMHint {
   startLine: number;
   endLine: number;
   text: string;
   reason?: string;
-};
+}
 
 export interface Options extends BaseOptions {
   prompt: 'line-number';

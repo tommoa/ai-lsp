@@ -9,10 +9,42 @@ import { generateText, type ModelMessage } from 'ai';
 import { NOOP_LOG, type TokenUsage } from '../src/util';
 import { parseJSONObject } from '../src/parser';
 
-export type TokenCost = {
+export interface TokenCost {
   cost: number;
   costWithoutCache: number;
-};
+}
+
+/**
+ * Summary interface for benchmark.ts approach comparison
+ */
+export interface BenchmarkApproachSummary {
+  approach: string;
+  avgScore: number;
+  genAvgMs: number;
+  genAvgInputTokens: number;
+  genAvgOutputTokens: number;
+  genAvgCost: number;
+  valid: number;
+  parseSuccessRate: number;
+  avgHintsPerRun: number;
+  avgConversionRate: number;
+}
+
+/**
+ * Summary interface for inline-benchmark.ts approach comparison
+ */
+export interface InlineApproachSummary {
+  approach: string;
+  avgLatency: number;
+  p50Latency: number;
+  p95Latency: number;
+  avgOutputTokens: number;
+  avgCost: number;
+  parseSuccessRate: number;
+  avgCompletions: number;
+  avgScore: number;
+  maxScore: number;
+}
 
 /**
  * Test case for inline completion or editing benchmarks.
@@ -104,13 +136,13 @@ export function calculateCost(
  */
 export function createEditDiff(
   original: string,
-  edits: Array<{
+  edits: {
     range: {
       start: { line: number; character: number };
       end: { line: number; character: number };
     };
     text: string;
-  }>,
+  }[],
   contextLines = 3,
 ): string {
   if (edits.length === 0) return '';
@@ -258,7 +290,7 @@ export async function rateChange(
       model: criticModelObj.model,
       messages,
     });
-    const criticRaw = (res as any)?.text ?? String(res ?? '');
+    const criticRaw = (res as { text?: string }).text ?? JSON.stringify(res);
 
     const parsed = parseJSONObject(criticRaw);
     return typeof parsed?.overall === 'number' ? parsed.overall : null;
@@ -384,7 +416,7 @@ export function parseCommonArgs(argv: string[]): {
     .filter(Boolean);
 
   const criticModel =
-    (parsed.get('--critic-model') as string) || models[0] || '';
+    (parsed.get('--critic-model') as string) ?? models[0] ?? '';
 
   return {
     common: {
@@ -466,7 +498,7 @@ export function printComparisonTable<T>(
       const formatted =
         typeof val === 'string'
           ? val
-          : formatNumber(val as number, { type: 'fixed', decimals: 2 });
+          : formatNumber(val, { type: 'fixed', decimals: 2 });
       return String(formatted).padEnd(valueColWidth);
     });
 
@@ -501,7 +533,7 @@ export function printComparisonTable<T>(
  * - "gemini-2.0-flash" -> "gemini-2.0-flash"
  */
 export function shortenModelName(fullName: string): string {
-  const name = fullName.split('/').at(-1) || fullName;
+  const name = fullName.split('/').at(-1) ?? fullName;
   return name
     .replace(/-20\d{6}$/g, '') // Remove date suffixes like -20241022
     .replace(/claude-(\d+)-(\d+)/, 'claude-$1.$2'); // Simplify claude version numbers (3-5 -> 3.5)
@@ -562,7 +594,7 @@ export function formatCost(cost: number, uncachedCost?: number): string {
  */
 export function exportBenchmarkResults(
   exportPath: string,
-  results: Record<string, any>,
+  results: Record<string, unknown>,
 ): void {
   fs.writeFileSync(exportPath, JSON.stringify(results, null, 2), 'utf8');
   console.log(`\nResults exported to: ${exportPath}`);
@@ -573,7 +605,7 @@ export function exportBenchmarkResults(
  * Filters metrics with valid tokenMetrics and extracts individual arrays.
  */
 export function extractTokenMetricArrays(
-  runMetrics: Array<{ tokenMetrics?: TokenUsage & TokenCost }>,
+  runMetrics: { tokenMetrics?: TokenUsage & TokenCost }[],
 ): {
   tokensInput: number[];
   tokensOutput: number[];
@@ -605,143 +637,159 @@ export function extractTokenMetricArrays(
  */
 export function buildBenchmarkApproachMetrics(
   runs: number,
-): TableMetric<any>[] {
+): TableMetric<BenchmarkApproachSummary>[] {
   return [
     {
       name: 'Quality Score',
-      getValue: (s: any) => s.avgScore,
+      getValue: (s: BenchmarkApproachSummary) => s.avgScore,
       higherIsBetter: true,
     },
     {
       name: 'Gen Latency (ms)',
-      getValue: (s: any) => s.genAvgMs,
+      getValue: (s: BenchmarkApproachSummary) => s.genAvgMs,
       higherIsBetter: false,
     },
     {
       name: 'Gen Input Tokens',
-      getValue: (s: any) => s.genAvgInputTokens,
+      getValue: (s: BenchmarkApproachSummary) => s.genAvgInputTokens,
       higherIsBetter: false,
     },
     {
       name: 'Gen Output Tokens',
-      getValue: (s: any) => s.genAvgOutputTokens,
+      getValue: (s: BenchmarkApproachSummary) => s.genAvgOutputTokens,
       higherIsBetter: false,
     },
     {
       name: 'Gen Cost ($)',
-      getValue: (s: any) => s.genAvgCost,
+      getValue: (s: BenchmarkApproachSummary) => s.genAvgCost,
       higherIsBetter: false,
     },
     {
       name: 'Success Rate',
-      getValue: (s: any) => (s.valid / runs) * 100,
+      getValue: (s: BenchmarkApproachSummary) => (s.valid / runs) * 100,
       higherIsBetter: true,
     },
     {
       name: 'Parse Success Rate',
-      getValue: (s: any) => s.parseSuccessRate,
+      getValue: (s: BenchmarkApproachSummary) => s.parseSuccessRate,
       higherIsBetter: true,
     },
     {
       name: 'Avg Hints Per Run',
-      getValue: (s: any) => s.avgHintsPerRun,
+      getValue: (s: BenchmarkApproachSummary) => s.avgHintsPerRun,
       higherIsBetter: true,
     },
     {
       name: 'Conversion Rate (%)',
-      getValue: (s: any) => s.avgConversionRate,
+      getValue: (s: BenchmarkApproachSummary) => s.avgConversionRate,
       higherIsBetter: true,
     },
   ];
+}
+
+/**
+ * Model result item for benchmark.ts model comparison
+ */
+export interface BenchmarkModelItem {
+  modelName: string;
+  summary: BenchmarkApproachSummary;
 }
 
 /**
  * Metric definitions for benchmark.ts model comparison
  */
-export function buildBenchmarkModelMetrics(runs: number): TableMetric<any>[] {
+export function buildBenchmarkModelMetrics(
+  runs: number,
+): TableMetric<BenchmarkModelItem>[] {
   return [
     {
       name: 'Quality Score',
-      getValue: (item: any) => item.summary.avgScore,
+      getValue: (item: BenchmarkModelItem) => item.summary.avgScore,
       higherIsBetter: true,
     },
     {
       name: 'Gen Latency (ms)',
-      getValue: (item: any) => item.summary.genAvgMs,
+      getValue: (item: BenchmarkModelItem) => item.summary.genAvgMs,
       higherIsBetter: false,
     },
     {
       name: 'Gen Input Tokens',
-      getValue: (item: any) => item.summary.genAvgInputTokens,
+      getValue: (item: BenchmarkModelItem) => item.summary.genAvgInputTokens,
       higherIsBetter: false,
     },
     {
       name: 'Gen Output Tokens',
-      getValue: (item: any) => item.summary.genAvgOutputTokens,
+      getValue: (item: BenchmarkModelItem) => item.summary.genAvgOutputTokens,
       higherIsBetter: false,
     },
     {
       name: 'Gen Cost ($)',
-      getValue: (item: any) => item.summary.genAvgCost,
+      getValue: (item: BenchmarkModelItem) => item.summary.genAvgCost,
       higherIsBetter: false,
     },
     {
       name: 'Success Rate',
-      getValue: (item: any) => (item.summary.valid / runs) * 100,
+      getValue: (item: BenchmarkModelItem) => (item.summary.valid / runs) * 100,
       higherIsBetter: true,
     },
     {
       name: 'Parse Success Rate',
-      getValue: (item: any) => item.summary.parseSuccessRate,
+      getValue: (item: BenchmarkModelItem) => item.summary.parseSuccessRate,
       higherIsBetter: true,
     },
     {
       name: 'Avg Hints Per Run',
-      getValue: (item: any) => item.summary.avgHintsPerRun,
+      getValue: (item: BenchmarkModelItem) => item.summary.avgHintsPerRun,
       higherIsBetter: true,
     },
     {
       name: 'Conversion Rate (%)',
-      getValue: (item: any) => item.summary.avgConversionRate,
+      getValue: (item: BenchmarkModelItem) => item.summary.avgConversionRate,
       higherIsBetter: true,
     },
   ];
 }
 
+type InlineMetric = TableMetric<InlineApproachSummary>;
+
 /**
  * Metric definitions for inline-benchmark.ts approach comparison
  */
-export function buildInlineApproachMetrics(): TableMetric<any>[] {
+export function buildInlineApproachMetrics(): InlineMetric[] {
   return [
     {
       name: 'Avg Latency (ms)',
-      getValue: (s: any) => formatNumber(s.avgLatency, { type: 'int' }),
+      getValue: (s: InlineApproachSummary) =>
+        formatNumber(s.avgLatency, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'P50 Latency (ms)',
-      getValue: (s: any) => formatNumber(s.p50Latency, { type: 'int' }),
+      getValue: (s: InlineApproachSummary) =>
+        formatNumber(s.p50Latency, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'P95 Latency (ms)',
-      getValue: (s: any) => formatNumber(s.p95Latency, { type: 'int' }),
+      getValue: (s: InlineApproachSummary) =>
+        formatNumber(s.p95Latency, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'Output Tokens',
-      getValue: (s: any) => formatNumber(s.avgOutputTokens, { type: 'int' }),
+      getValue: (s: InlineApproachSummary) =>
+        formatNumber(s.avgOutputTokens, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'Cost ($)',
-      getValue: (s: any) =>
+      getValue: (s: InlineApproachSummary) =>
         formatNumber(s.avgCost, { type: 'fixed', decimals: 6 }),
       higherIsBetter: false,
     },
     {
       name: 'Success Rate (%)',
-      getValue: (s: any) =>
+      getValue: (s: InlineApproachSummary) =>
         formatNumber(s.parseSuccessRate, {
           type: 'fixed',
           decimals: 1,
@@ -750,7 +798,7 @@ export function buildInlineApproachMetrics(): TableMetric<any>[] {
     },
     {
       name: 'Avg Completions',
-      getValue: (s: any) =>
+      getValue: (s: InlineApproachSummary) =>
         formatNumber(s.avgCompletions, {
           type: 'fixed',
           decimals: 2,
@@ -759,7 +807,7 @@ export function buildInlineApproachMetrics(): TableMetric<any>[] {
     },
     {
       name: 'Avg Quality Score',
-      getValue: (s: any) =>
+      getValue: (s: InlineApproachSummary) =>
         formatNumber(s.avgScore, {
           type: 'fixed',
           decimals: 1,
@@ -768,7 +816,7 @@ export function buildInlineApproachMetrics(): TableMetric<any>[] {
     },
     {
       name: 'Max Quality Score',
-      getValue: (s: any) =>
+      getValue: (s: InlineApproachSummary) =>
         formatNumber(s.maxScore, {
           type: 'fixed',
           decimals: 1,
@@ -779,37 +827,45 @@ export function buildInlineApproachMetrics(): TableMetric<any>[] {
 }
 
 /**
+ * Model result item for inline-benchmark.ts model comparison
+ */
+export interface InlineModelItem {
+  modelName: string;
+  summary: InlineApproachSummary;
+}
+
+/**
  * Metric definitions for inline-benchmark.ts model comparison
  */
-export function buildInlineModelMetrics(): TableMetric<any>[] {
+export function buildInlineModelMetrics(): TableMetric<InlineModelItem>[] {
   return [
     {
       name: 'Avg Latency (ms)',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.avgLatency, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'P50 Latency (ms)',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.p50Latency, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'P95 Latency (ms)',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.p95Latency, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'Output Tokens',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.avgOutputTokens, { type: 'int' }),
       higherIsBetter: false,
     },
     {
       name: 'Cost ($)',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.avgCost, {
           type: 'fixed',
           decimals: 6,
@@ -818,7 +874,7 @@ export function buildInlineModelMetrics(): TableMetric<any>[] {
     },
     {
       name: 'Success Rate (%)',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.parseSuccessRate, {
           type: 'fixed',
           decimals: 1,
@@ -827,7 +883,7 @@ export function buildInlineModelMetrics(): TableMetric<any>[] {
     },
     {
       name: 'Avg Completions',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.avgCompletions, {
           type: 'fixed',
           decimals: 2,
@@ -836,7 +892,7 @@ export function buildInlineModelMetrics(): TableMetric<any>[] {
     },
     {
       name: 'Avg Quality Score',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.avgScore, {
           type: 'fixed',
           decimals: 1,
@@ -845,7 +901,7 @@ export function buildInlineModelMetrics(): TableMetric<any>[] {
     },
     {
       name: 'Max Quality Score',
-      getValue: (item: any) =>
+      getValue: (item: InlineModelItem) =>
         formatNumber(item.summary.maxScore, {
           type: 'fixed',
           decimals: 1,

@@ -34,7 +34,7 @@ interface BaseEdit {
 /**
  * Inline completion item
  */
-export interface InlineCompletion extends BaseEdit {}
+export type InlineCompletion = BaseEdit;
 
 /**
  * Prefix/suffix edit item

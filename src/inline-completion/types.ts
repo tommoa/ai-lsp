@@ -5,10 +5,10 @@
 
 import type { TextDocumentPositionParams } from 'vscode-languageserver/node';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
-import { Log, TokenUsage } from '../util';
-import { LanguageModel } from 'ai';
+import { type Log, type TokenUsage } from '../util';
+import { type LanguageModel } from 'ai';
 
-export type Completion = {
+export interface Completion {
   /**
    * The actual completion text that has been returned. Will only be the text
    * from the point of the cursor.
@@ -18,12 +18,12 @@ export type Completion = {
    * The reason why the text has been returned, according to the LLM (if any).
    */
   reason?: string;
-};
+}
 
 /**
  * The Result type of the inline-completion endpoint. This
  */
-export type Result = {
+export interface Result {
   /**
    * The list of potential completions that the LLM has suggested.
    */
@@ -32,7 +32,7 @@ export type Result = {
    * The total number of tokens used to generate these completions.
    */
   tokenUsage?: TokenUsage;
-};
+}
 
 /**
  * Generation options for the inline-completion endpoint.

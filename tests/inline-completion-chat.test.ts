@@ -48,9 +48,9 @@ describe('generateChat', () => {
 
       expect(result.completions).not.toBeEmpty();
       expect(result.completions).toHaveLength(2);
-      expect(result.completions![0]!.text).toBe('sum');
-      expect(result.completions![0]!.reason).toBe('variable name');
-      expect(result.completions![1]!.text).toBe('result');
+      expect(result.completions[0]!.text).toBe('sum');
+      expect(result.completions[0]!.reason).toBe('variable name');
+      expect(result.completions[1]!.text).toBe('result');
     });
 
     it('should include token usage in result', async () => {
@@ -86,9 +86,9 @@ describe('generateChat', () => {
       });
 
       expect(result.completions).toHaveLength(2);
-      expect(result.completions![0]!.text).toBe('completion1');
-      expect(result.completions![0]!.reason).toBe('');
-      expect(result.completions![1]!.reason).toBe('has reason');
+      expect(result.completions[0]!.text).toBe('completion1');
+      expect(result.completions[0]!.reason).toBe('');
+      expect(result.completions[1]!.reason).toBe('has reason');
     });
   });
 
@@ -114,8 +114,8 @@ describe('generateChat', () => {
 
       // Only 2 valid completions should remain
       expect(result.completions).toHaveLength(2);
-      expect(result.completions![0]!.text).toBe('valid');
-      expect(result.completions![1]!.text).toBe('also valid');
+      expect(result.completions[0]!.text).toBe('valid');
+      expect(result.completions[1]!.text).toBe('also valid');
     });
 
     it('should return empty when all completions are invalid', async () => {
@@ -239,7 +239,7 @@ describe('generateChat', () => {
       });
 
       expect(result.completions).not.toBeEmpty();
-      expect(result.completions![0]!.text).toBe('a + b');
+      expect(result.completions[0]!.text).toBe('a + b');
     });
   });
 
@@ -250,13 +250,14 @@ describe('generateChat', () => {
       ]);
       const model = createMockModel({ response: chatResponse });
 
-      // Test default (no prompt specified)
+      // Test default prompt="chat"
       const result1 = await generateCompletion({
+        prompt: 'chat',
         model,
         document: testDoc,
         position: testPosition,
         log: NOOP_LOG,
-      } as any);
+      });
       expect(result1.completions).not.toBeEmpty();
       expect(result1.completions?.[0]?.text).toBe('chat_completion');
 

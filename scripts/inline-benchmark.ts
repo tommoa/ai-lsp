@@ -437,7 +437,7 @@ function printComparisonTableLocal(summaries: ApproachSummary[]): void {
 }
 
 function printModelComparisonTable(
-  modelResults: Array<{ modelName: string; summary: ApproachSummary }>,
+  modelResults: { modelName: string; summary: ApproachSummary }[],
   approach: ApproachType,
 ): void {
   const metrics = buildInlineModelMetrics();
@@ -516,8 +516,10 @@ function exportResultsToJson(
   allResults: TestCaseResults[],
   exportPath: string,
 ): void {
-  const results = allResults.flatMap(tcResults =>
-    tcResults.summaries.map(summary => {
+  const results: Record<string, unknown> = {};
+
+  for (const tcResults of allResults) {
+    for (const summary of tcResults.summaries) {
       const result = tcResults.results.get(summary.approach);
       const key =
         `${tcResults.modelName}:${tcResults.testCaseName}:` +
@@ -528,29 +530,26 @@ function exportResultsToJson(
         result ?? [],
       );
 
-      return {
-        key,
-        value: {
-          modelName: tcResults.modelName,
-          testCaseName: tcResults.testCaseName,
-          approach: summary.approach,
-          latencies,
-          tokensInput,
-          tokensOutput,
-          costs,
-          // Summary statistics
-          avgLatency: summary.avgLatency,
-          p50Latency: summary.p50Latency,
-          p95Latency: summary.p95Latency,
-          avgInputTokens: summary.avgInputTokens,
-          avgOutputTokens: summary.avgOutputTokens,
-          avgCost: summary.avgCost,
-          parseSuccessRate: summary.parseSuccessRate,
-          avgCompletions: summary.avgCompletions,
-        },
+      results[key] = {
+        modelName: tcResults.modelName,
+        testCaseName: tcResults.testCaseName,
+        approach: summary.approach,
+        latencies,
+        tokensInput,
+        tokensOutput,
+        costs,
+        // Summary statistics
+        avgLatency: summary.avgLatency,
+        p50Latency: summary.p50Latency,
+        p95Latency: summary.p95Latency,
+        avgInputTokens: summary.avgInputTokens,
+        avgOutputTokens: summary.avgOutputTokens,
+        avgCost: summary.avgCost,
+        parseSuccessRate: summary.parseSuccessRate,
+        avgCompletions: summary.avgCompletions,
       };
-    }),
-  );
+    }
+  }
 
   exportBenchmarkResults(exportPath, results);
 }
@@ -567,7 +566,7 @@ async function main(): Promise<void> {
   const testCasesData = fs.readFileSync(testCasesPath, 'utf8');
   let testCases: TestCase[];
   try {
-    testCases = JSON.parse(testCasesData);
+    testCases = JSON.parse(testCasesData) as TestCase[];
   } catch (e) {
     console.error('Failed to parse test cases JSON:', String(e));
     process.exit(1);

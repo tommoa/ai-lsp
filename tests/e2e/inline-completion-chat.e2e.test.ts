@@ -30,7 +30,7 @@ describe('E2E: Inline Completion (Chat)', () => {
     await client.shutdown();
   });
 
-  it('should initialize server successfully', async () => {
+  it('should initialize server successfully', () => {
     expect(client.isRunning()).toBe(true);
   });
 

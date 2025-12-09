@@ -4,12 +4,13 @@ export type Level = 'info' | 'warn' | 'error' | 'debug';
 export type Log = (
   level: Level,
   message: string,
-  extra?: Record<string, any>,
+  extra?: Record<string, unknown>,
 ) => void;
 
 /**
  * No-op logger that does nothing. Use this when logging is not needed.
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-function
 export const NOOP_LOG: Log = (_level, _message, _extra) => {};
 
 /**
@@ -24,7 +25,7 @@ export function time(
   log: Log,
   level: Level,
   message: string,
-  extra?: Record<string, any>,
+  extra?: Record<string, unknown>,
 ) {
   const now = Date.now();
   log(level, message, { status: 'started', ...extra });
@@ -43,12 +44,12 @@ export function time(
   };
 }
 
-export type TokenUsage = {
+export interface TokenUsage {
   input: number;
   output: number;
   reasoning?: number;
   cachedInput?: number;
-};
+}
 
 /**
  * Extract token usage from AI SDK generateText response.
@@ -91,7 +92,7 @@ export function cleanFimResponse(text: string, prefix: string): string {
 
   // Strip markdown fences: handles both complete (```lang\ncode\n```)
   // and incomplete (```lang\ncode) fences
-  const fence = trimmed.match(/^```\S*\n([\s\S]*?)(?:\n```)?$/);
+  const fence = /^```\S*\n([\s\S]*?)(?:\n```)?$/.exec(trimmed);
   let cleaned = fence?.[1] ?? text;
 
   // If the response starts with the prefix, remove it to get just the
@@ -103,11 +104,27 @@ export function cleanFimResponse(text: string, prefix: string): string {
   return cleaned;
 }
 
-export function extractTokenUsage(res: any): TokenUsage | null {
+interface TokenUsageSource {
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    reasoningTokens?: number;
+    cachedInputTokens?: number;
+  };
+  result?: { usage?: TokenUsageSource['usage'] };
+  token_usage?: TokenUsageSource['usage'];
+  meta?: { usage?: TokenUsageSource['usage'] };
+}
+
+export function extractTokenUsage(res: unknown): TokenUsage | null {
   if (!res || typeof res !== 'object') return null;
 
+  const typed = res as TokenUsageSource;
   const usage =
-    res.usage ?? res.result?.usage ?? res.token_usage ?? res.meta?.usage;
+    typed.usage ??
+    typed.result?.usage ??
+    typed.token_usage ??
+    typed.meta?.usage;
   if (!usage) return null;
 
   const {

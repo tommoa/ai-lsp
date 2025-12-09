@@ -4,6 +4,8 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleDetection": "force",
+    "isolatedModules": true,
+    "esModuleInterop": true,
     "jsx": "react-jsx",
     "allowJs": true,
     "moduleResolution": "bundler",
@@ -16,7 +18,8 @@
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+    "resolveJsonModule": true
   },
   "include": ["src", "**/*.ts", "**/*.tsx", "**/*.js"],
   "exclude": ["dist", "node_modules"]

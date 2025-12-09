@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach } from 'bun:test';
+import fs from 'fs';
+import path from 'path';
 import {
   avg,
   percentile,
@@ -17,10 +19,15 @@ import {
   buildInlineApproachMetrics,
   buildInlineModelMetrics,
   rateChange,
+  type TokenCost,
+  type BenchmarkApproachSummary,
+  type BenchmarkModelItem,
+  type InlineApproachSummary,
+  type InlineModelItem,
 } from '../scripts/benchmark-utils';
 import type { TokenUsage } from '../src/util';
-import fs from 'fs';
-import path from 'path';
+
+type TokenMetrics = TokenUsage & TokenCost;
 
 describe('Benchmark Utilities - Calculations', () => {
   describe('avg function', () => {
@@ -322,7 +329,9 @@ describe('Benchmark Utilities - Diff & Display', () => {
           },
         },
       ];
-      const result = extractTokenMetricArrays(runMetrics as any);
+      const result = extractTokenMetricArrays(
+        runMetrics as { tokenMetrics?: TokenMetrics }[],
+      );
       expect(result.tokensInput).toEqual([100, 200]);
       expect(result.tokensOutput).toEqual([50, 60]);
       expect(result.tokensReasoning).toContain(25);
@@ -335,8 +344,9 @@ describe('Benchmark Utilities - Concurrency', () => {
   describe('runConcurrent function', () => {
     it('should execute all tasks', async () => {
       const executed: number[] = [];
-      await runConcurrent(5, 2, async idx => {
+      await runConcurrent(5, 2, (idx: number) => {
         executed.push(idx);
+        return Promise.resolve();
       });
       expect(executed.sort()).toEqual([0, 1, 2, 3, 4]);
     });
@@ -355,16 +365,18 @@ describe('Benchmark Utilities - Concurrency', () => {
 
     it('should handle zero concurrency by using 1', async () => {
       const executed: number[] = [];
-      await runConcurrent(3, 0, async idx => {
+      await runConcurrent(3, 0, (idx: number) => {
         executed.push(idx);
+        return Promise.resolve();
       });
       expect(executed.length).toBe(3);
     });
 
     it('should handle concurrency greater than total runs', async () => {
       const executed: number[] = [];
-      await runConcurrent(3, 10, async idx => {
+      await runConcurrent(3, 10, (idx: number) => {
         executed.push(idx);
+        return Promise.resolve();
       });
       expect(executed.length).toBe(3);
     });
@@ -397,7 +409,7 @@ describe('Benchmark Utilities - Concurrency', () => {
 
       expect(fs.existsSync(testFile)).toBe(true);
       const content = fs.readFileSync(testFile, 'utf8');
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(content) as typeof results;
       expect(parsed).toEqual(results);
     });
 
@@ -462,11 +474,15 @@ describe('Benchmark Utilities - Formatting', () => {
     });
 
     it('should return N/A for non-number values', () => {
-      expect(formatNumber(undefined as any, { type: 'int' })).toBe('N/A');
-      expect(formatNumber(null as any, { type: 'fixed', decimals: 2 })).toBe(
-        'N/A',
-      );
-      expect(formatNumber('string' as any, { type: 'percent' })).toBe('N/A');
+      expect(
+        formatNumber(undefined as unknown as number, { type: 'int' }),
+      ).toBe('N/A');
+      expect(
+        formatNumber(null as unknown as number, { type: 'fixed', decimals: 2 }),
+      ).toBe('N/A');
+      expect(
+        formatNumber('string' as unknown as number, { type: 'percent' }),
+      ).toBe('N/A');
     });
 
     it('should handle edge cases', () => {
@@ -504,7 +520,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       expect(qualityMetric).toBeDefined();
       expect(qualityMetric!.higherIsBetter).toBe(true);
 
-      const mockData = { avgScore: 85.5 };
+      const mockData = { avgScore: 85.5 } as BenchmarkApproachSummary;
       expect(qualityMetric!.getValue(mockData)).toBe(85.5);
     });
 
@@ -514,7 +530,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       expect(latencyMetric).toBeDefined();
       expect(latencyMetric!.higherIsBetter).toBe(false);
 
-      const mockData = { genAvgMs: 1234 };
+      const mockData = { genAvgMs: 1234 } as BenchmarkApproachSummary;
       expect(latencyMetric!.getValue(mockData)).toBe(1234);
     });
 
@@ -524,7 +540,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       expect(successRateMetric).toBeDefined();
       expect(successRateMetric!.higherIsBetter).toBe(true);
 
-      const mockData = { valid: 8 };
+      const mockData = { valid: 8 } as BenchmarkApproachSummary;
       expect(successRateMetric!.getValue(mockData)).toBe(80);
     });
 
@@ -545,7 +561,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
         genAvgInputTokens: 1000,
         genAvgOutputTokens: 250,
         genAvgCost: 0.0042,
-      };
+      } as BenchmarkApproachSummary;
 
       expect(inputTokenMetric!.getValue(mockData)).toBe(1000);
       expect(outputTokenMetric!.getValue(mockData)).toBe(250);
@@ -577,7 +593,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
           avgHintsPerRun: 3.2,
           avgConversionRate: 88,
         },
-      };
+      } as BenchmarkModelItem;
 
       expect(qualityMetric!.getValue(mockData)).toBe(92.3);
     });
@@ -587,7 +603,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       const successRateMetric = metrics.find(m => m.name === 'Success Rate');
       expect(successRateMetric).toBeDefined();
 
-      const mockData = { summary: { valid: 7 } };
+      const mockData = { summary: { valid: 7 } } as BenchmarkModelItem;
       expect(successRateMetric!.getValue(mockData)).toBe(70);
     });
 
@@ -623,7 +639,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
         avgLatency: 123.456,
         p50Latency: 100.789,
         p95Latency: 250.123,
-      };
+      } as InlineApproachSummary;
 
       expect(avgLatencyMetric!.getValue(mockData)).toBe(123);
       expect(p50Metric!.getValue(mockData)).toBe(101);
@@ -635,7 +651,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       const outputTokensMetric = metrics.find(m => m.name === 'Output Tokens');
       expect(outputTokensMetric).toBeDefined();
 
-      const mockData = { avgOutputTokens: 156.789 };
+      const mockData = { avgOutputTokens: 156.789 } as InlineApproachSummary;
       expect(outputTokensMetric!.getValue(mockData)).toBe(157);
     });
 
@@ -644,7 +660,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       const costMetric = metrics.find(m => m.name === 'Cost ($)');
       expect(costMetric).toBeDefined();
 
-      const mockData = { avgCost: 0.001234567 };
+      const mockData = { avgCost: 0.001234567 } as InlineApproachSummary;
       expect(costMetric!.getValue(mockData)).toBe('0.001235');
     });
 
@@ -655,7 +671,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       );
       expect(successRateMetric).toBeDefined();
 
-      const mockData = { parseSuccessRate: 87.654 };
+      const mockData = { parseSuccessRate: 87.654 } as InlineApproachSummary;
       expect(successRateMetric!.getValue(mockData)).toBe('87.7%');
     });
 
@@ -664,7 +680,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       const completionsMetric = metrics.find(m => m.name === 'Avg Completions');
       expect(completionsMetric).toBeDefined();
 
-      const mockData = { avgCompletions: 3.456 };
+      const mockData = { avgCompletions: 3.456 } as InlineApproachSummary;
       expect(completionsMetric!.getValue(mockData)).toBe('3.46');
     });
 
@@ -679,7 +695,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
       const mockData = {
         avgScore: 82.345,
         maxScore: 95.678,
-      };
+      } as InlineApproachSummary;
 
       expect(avgScoreMetric!.getValue(mockData)).toBe('82.3');
       expect(maxScoreMetric!.getValue(mockData)).toBe('95.7');
@@ -723,7 +739,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
           p50Latency: 400.123,
           p95Latency: 600.456,
         },
-      };
+      } as InlineModelItem;
 
       expect(avgLatencyMetric!.getValue(mockData)).toBe(457);
       expect(p50Metric!.getValue(mockData)).toBe(400);
@@ -739,7 +755,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
         summary: {
           avgOutputTokens: 150.789,
         },
-      };
+      } as InlineModelItem;
 
       expect(outputTokensMetric!.getValue(mockData)).toBe(151);
     });
@@ -759,7 +775,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
           avgCost: 0.001234567,
           parseSuccessRate: 87.654,
         },
-      };
+      } as InlineModelItem;
 
       expect(costMetric!.getValue(mockData)).toBe('0.001235');
       expect(successRateMetric!.getValue(mockData)).toBe('87.7%');
@@ -774,7 +790,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
         summary: {
           avgCompletions: 2.876,
         },
-      };
+      } as InlineModelItem;
 
       expect(completionsMetric!.getValue(mockData)).toBe('2.88');
     });
@@ -792,7 +808,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
           avgScore: 88.567,
           maxScore: 96.123,
         },
-      };
+      } as InlineModelItem;
 
       expect(avgScoreMetric!.getValue(mockData)).toBe('88.6');
       expect(maxScoreMetric!.getValue(mockData)).toBe('96.1');
@@ -816,7 +832,7 @@ describe('Benchmark Utilities - Metric Builders', () => {
         summary: {
           avgLatency: NaN,
         },
-      };
+      } as InlineModelItem;
 
       expect(avgLatencyMetric!.getValue(mockData)).toBe('N/A');
     });

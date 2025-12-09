@@ -20,7 +20,7 @@ import {
   type FimContext,
 } from './fim-formats';
 import { UnsupportedPromptError } from './errors';
-import { Completion, Result, GenerateOptions } from './types';
+import { type Completion, type Result, type GenerateOptions } from './types';
 
 export interface Options extends GenerateOptions {
   prompt: 'fim';
@@ -85,10 +85,10 @@ export async function generate(opts: Options): Promise<Result> {
       ? decodeURIComponent(workspaceRootUri.slice(7))
       : workspaceRootUri;
     const segments = rootPath.split('/').filter(Boolean);
-    repoName = segments[segments.length - 1] || 'unknown';
+    repoName = segments[segments.length - 1] ?? 'unknown';
   }
 
-  log('debug', `FIM format: ${fimFormat.name || 'custom'}`);
+  log('debug', `FIM format: ${fimFormat.name ?? 'custom'}`);
 
   // Build FIM prompt with template and typed context
   const context: FimContext = {

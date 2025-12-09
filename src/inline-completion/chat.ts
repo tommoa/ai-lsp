@@ -9,16 +9,24 @@
 import { generateText, type ModelMessage } from 'ai';
 import { time, extractTokenUsage } from '../util';
 import { parseResponse } from '../parser';
-import { type Result, type Completion, GenerateOptions } from './types';
+import { type Result, type Completion, type GenerateOptions } from './types';
 
 import INLINE_COMPLETION_PROMPT from '../../prompt/inline-completion.txt';
+
+interface RawCompletion {
+  text?: unknown;
+  reason?: unknown;
+}
 
 /**
  * Validate and normalize a completion object from LLM response
  */
-function validateCompletion(item: any): Completion | null {
-  if (!item?.text || typeof item.text !== 'string') return null;
-  return { text: item.text, reason: item.reason ?? '' };
+function validateCompletion(item: unknown): Completion | null {
+  if (!item || typeof item !== 'object') return null;
+  const raw = item as RawCompletion;
+  if (!raw.text || typeof raw.text !== 'string') return null;
+  const reason = typeof raw.reason === 'string' ? raw.reason : '';
+  return { text: raw.text, reason };
 }
 
 export interface Options extends GenerateOptions {
@@ -80,7 +88,7 @@ export async function generate(opts: Options): Promise<Result> {
 
     // Parse the JSON response from the model
     const parsed = parseResponse(text, log);
-    const normalized: Completion[] = (parsed as any[])
+    const normalized: Completion[] = parsed
       .map(validateCompletion)
       .filter((c): c is Completion => c !== null);
 
