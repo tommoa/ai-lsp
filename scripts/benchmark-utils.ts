@@ -73,14 +73,16 @@ const CRITIC_PROMPT_DIFF =
   'Be concise.';
 
 const CRITIC_PROMPT_COMPLETION =
-  'You are a strict code reviewer evaluating an autocomplete suggestion. ' +
-  'The code shown includes the autocomplete result. ' +
-  'Rate ONLY the quality and appropriateness of the SUGGESTION itself, ' +
-  'not the overall file quality. ' +
-  'Consider: correctness, relevance, completeness. ' +
-  'All scores are out of 100. ' +
-  'Return ONLY a JSON object with the schema {"overall":number,...}. ' +
-  'Be concise.';
+  'You are evaluating an inline autocomplete suggestion shown as a diff. ' +
+  'Lines with - are the original text being replaced. ' +
+  'Lines with + show the suggested completion. ' +
+  'Lines with space prefix are unchanged context. ' +
+  'Evaluate: (1) syntactic correctness, (2) semantic fit with surrounding ' +
+  'code, (3) whether it completes at a natural boundary (token, statement, ' +
+  'or block), (4) likelihood this is what the developer intended. ' +
+  'Rate only the suggestion itself, not the quality of the surrounding code. ' +
+  'Score 0-100 where 80+ is good, 50-80 is acceptable, <50 is poor. ' +
+  'Return ONLY JSON: {"overall": number}.';
 
 export function classifyParseError(err: unknown): ParseErrorType {
   const msg = String(err);
@@ -229,6 +231,114 @@ export function createEditDiff(
   }
 
   return hunks.join('\n\n');
+}
+
+/**
+ * Format a completion as a diff showing the insertion point.
+ * Returns the full file with diff markers:
+ * - Lines before cursor: shown as context (space prefix)
+ * - Partial line at cursor: shown as deleted (-) then added (+) with completion
+ * - New lines from completion: shown as added (+)
+ * - Lines after cursor: shown as context (space prefix)
+ *
+ * This gives the critic full file context to evaluate the completion.
+ */
+export function formatCompletionAsDiff(
+  prefix: string,
+  completion: string,
+  suffix: string,
+): string {
+  // Handle empty completion - just return the unchanged file
+  if (completion === '') {
+    const fullFile = prefix + suffix;
+    return fullFile
+      .split('\n')
+      .map(line => ' ' + line)
+      .join('\n');
+  }
+
+  const prefixLines = prefix.split('\n');
+  const suffixLines = suffix.split('\n');
+
+  // The partial line is the last line of prefix (may be empty if cursor is at
+  // start of line)
+  const partialLine = prefixLines[prefixLines.length - 1];
+  // Context lines before the cursor (all prefix lines except the last)
+  const contextBefore = prefixLines.slice(0, -1);
+
+  // The suffix remainder is the first line of suffix (continues after cursor)
+  const suffixRemainder = suffixLines[0];
+  // Context lines after the cursor (all suffix lines except the first)
+  const contextAfter = suffixLines.slice(1);
+
+  // Split completion into lines
+  const completionLines = completion.split('\n');
+
+  const result: string[] = [];
+
+  // Add context before (all lines before the cursor line)
+  for (const line of contextBefore) {
+    result.push(' ' + line);
+  }
+
+  // Determine if this is a pure insertion (cursor at end of complete line)
+  // A pure insertion is when the partial line is empty AND the completion
+  // starts with content (not extending a partial line)
+  const isPureInsertion = partialLine === '' && !completion.startsWith('\n');
+
+  if (isPureInsertion) {
+    // Pure insertion: completion is new lines inserted at cursor
+    // First completion line + suffix remainder becomes the first new line
+    if (completionLines.length === 1) {
+      result.push('+' + completionLines[0] + suffixRemainder);
+    } else {
+      // Multiple completion lines
+      result.push('+' + completionLines[0]);
+      for (let i = 1; i < completionLines.length - 1; i++) {
+        result.push('+' + completionLines[i]);
+      }
+      result.push(
+        '+' + completionLines[completionLines.length - 1] + suffixRemainder,
+      );
+    }
+  } else if (completionLines.length === 1) {
+    // Single-line completion extending the partial line
+    // Show old partial line as deleted, new completed line as added
+    if (partialLine !== '' || suffixRemainder !== '') {
+      result.push('-' + partialLine + suffixRemainder);
+    }
+    result.push('+' + partialLine + completion + suffixRemainder);
+  } else {
+    // Multi-line completion
+    // The first line of completion extends the partial line
+    // Subsequent lines are new
+    // The last line of completion is joined with suffix remainder
+
+    // Show the original line (partial + suffix remainder) as deleted
+    if (partialLine !== '' || suffixRemainder !== '') {
+      result.push('-' + partialLine + suffixRemainder);
+    }
+
+    // First completion line extends the partial line
+    result.push('+' + partialLine + completionLines[0]);
+
+    // Middle completion lines (if any)
+    for (let i = 1; i < completionLines.length - 1; i++) {
+      result.push('+' + completionLines[i]);
+    }
+
+    // Last completion line + suffix remainder
+    result.push(
+      '+' + completionLines[completionLines.length - 1] + suffixRemainder,
+    );
+  }
+
+  // Add context after (all lines after the cursor line)
+  for (const line of contextAfter) {
+    result.push(' ' + line);
+  }
+
+  return result.join('\n');
 }
 
 export function colorizeUnifiedDiff(diffText: string, noColor = false): string {

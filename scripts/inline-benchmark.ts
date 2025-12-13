@@ -22,6 +22,7 @@ import {
   avg,
   classifyParseError,
   rateChange,
+  formatCompletionAsDiff,
   percentile,
   calculateCost,
   runConcurrent,
@@ -265,9 +266,13 @@ async function runSingleBenchmark(opts: {
     if (critic && completions.length > 0) {
       const rateResults = await Promise.all(
         completions.map(async completion => {
-          const resultCode = testCase.before + completion.text + testCase.after;
+          const formattedDiff = formatCompletionAsDiff(
+            testCase.before,
+            completion.text,
+            testCase.after,
+          );
           const rateRes = await rateChange(
-            resultCode,
+            formattedDiff,
             `${testCase.name}.${testCase.language}`,
             criticModel,
             'completion',

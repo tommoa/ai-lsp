@@ -9,6 +9,7 @@ import {
   parseCommonArgs,
   classifyParseError,
   createEditDiff,
+  formatCompletionAsDiff,
   colorizeUnifiedDiff,
   extractTokenMetricArrays,
   runConcurrent,
@@ -293,6 +294,136 @@ describe('Benchmark Utilities - Diff & Display', () => {
       const diff = createEditDiff(original, edits);
       expect(diff.indexOf('Y')).toBeLessThan(diff.indexOf('X'));
       expect(diff.indexOf('Z')).toBeGreaterThan(diff.indexOf('X'));
+    });
+  });
+
+  describe('formatCompletionAsDiff function', () => {
+    it('should handle mid-line completion', () => {
+      const result = formatCompletionAsDiff(
+        'function foo() {\n  total +=',
+        ' price * qty;',
+        '\n}',
+      );
+      expect(result).toContain('-  total +=');
+      expect(result).toContain('+  total += price * qty;');
+      expect(result).toContain(' function foo() {');
+      expect(result).toContain(' }');
+    });
+
+    it('should handle end-of-line completion (pure insertion)', () => {
+      const result = formatCompletionAsDiff(
+        'function foo() {\n',
+        '  return 42;',
+        '\n}',
+      );
+      // Pure insertion at start of line - no deleted line
+      expect(result).not.toMatch(/^-/m);
+      expect(result).toContain('+  return 42;');
+      expect(result).toContain(' function foo() {');
+      expect(result).toContain(' }');
+    });
+
+    it('should handle multiline completion extending partial line', () => {
+      const result = formatCompletionAsDiff(
+        'function foo() {',
+        '\n  const x = 1;\n  return x;',
+        '\n}',
+      );
+      // Original line shown as deleted
+      expect(result).toContain('-function foo() {');
+      // First line of completion extends the partial line
+      expect(result).toContain('+function foo() {');
+      expect(result).toContain('+  const x = 1;');
+      expect(result).toContain('+  return x;');
+      expect(result).toContain(' }');
+    });
+
+    it('should handle completion starting with newline at end of line', () => {
+      const result = formatCompletionAsDiff(
+        'const x = 1;',
+        '\nconst y = 2;',
+        '\nconst z = 3;',
+      );
+      // The partial line "const x = 1;" is extended with newline
+      expect(result).toContain('-const x = 1;');
+      expect(result).toContain('+const x = 1;');
+      expect(result).toContain('+const y = 2;');
+      expect(result).toContain(' const z = 3;');
+    });
+
+    it('should handle empty completion', () => {
+      const result = formatCompletionAsDiff('const x = ', '', '1;');
+      // Empty completion means no change - all lines are context
+      expect(result).toBe(' const x = 1;');
+    });
+
+    it('should include full file context', () => {
+      const result = formatCompletionAsDiff(
+        'line1\nline2\npartial',
+        ' completed',
+        '\nline4\nline5',
+      );
+      expect(result).toContain(' line1');
+      expect(result).toContain(' line2');
+      expect(result).toContain('-partial');
+      expect(result).toContain('+partial completed');
+      expect(result).toContain(' line4');
+      expect(result).toContain(' line5');
+    });
+
+    it('should handle single line file with mid-line completion', () => {
+      const result = formatCompletionAsDiff('const x =', ' 42', ';');
+      expect(result).toContain('-const x =;');
+      expect(result).toContain('+const x = 42;');
+    });
+
+    it('should handle completion at very start of file', () => {
+      const result = formatCompletionAsDiff(
+        '',
+        'const x = 1;',
+        '\nconst y = 2;',
+      );
+      expect(result).toContain('+const x = 1;');
+      expect(result).toContain(' const y = 2;');
+    });
+
+    it('should handle completion at very end of file', () => {
+      const result = formatCompletionAsDiff(
+        'const x = 1;\n',
+        'const y = 2;',
+        '',
+      );
+      expect(result).toContain(' const x = 1;');
+      expect(result).toContain('+const y = 2;');
+    });
+
+    it('should handle multiline completion with empty suffix', () => {
+      const result = formatCompletionAsDiff(
+        'function foo() {',
+        '\n  return 1;\n}',
+        '',
+      );
+      expect(result).toContain('-function foo() {');
+      expect(result).toContain('+function foo() {');
+      expect(result).toContain('+  return 1;');
+      expect(result).toContain('+}');
+    });
+
+    it('should handle multiline pure insertion at start of line', () => {
+      // Cursor is at start of a new line (after newline in prefix)
+      // Completion is multiple lines, not starting with newline
+      const result = formatCompletionAsDiff(
+        'function foo() {\n',
+        '  const x = 1;\n  const y = 2;\n  return x + y;',
+        '\n}',
+      );
+      // This is a pure insertion - no deleted lines
+      expect(result).not.toMatch(/^-/m);
+      expect(result).toContain(' function foo() {');
+      expect(result).toContain('+  const x = 1;');
+      expect(result).toContain('+  const y = 2;');
+      expect(result).toContain('+  return x + y;');
+      expect(result).toContain(' }');
     });
   });
 
